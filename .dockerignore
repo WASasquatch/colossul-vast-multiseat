@@ -1,0 +1,13 @@
+# The build context is only this project's scripts and supervisor configs.
+# Application source is fetched at provision time, so nothing large or private
+# should ever enter the context.
+.git
+.gitignore
+*.md
+docs/
+tests/
+build.sh
+
+# Byte-code from running the patch script or tests locally must not ship.
+__pycache__/
+*.pyc

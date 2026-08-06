@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Print the PORTAL_CONFIG string and the template port list for N seats.
+#
+# The image ships a PORTAL_CONFIG for the default 4 seats. If you change
+# NUM_SEATS you must also update PORTAL_CONFIG and the template's exposed
+# ports, because the Instance Portal and Caddy read that variable at first boot
+# — provisioning cannot add ports to it after the fact.
+#
+#   colossul-portal-config          # default NUM_SEATS (or 4)
+#   colossul-portal-config 6        # six seats
+#   colossul-portal-config 4 --backends   # also expose each backend's /docs
+set -euo pipefail
+
+# Resolve the shared lib from the installed location, falling back to the
+# repo layout so the topology can be tested without building the image.
+_LIB="${COLOSSUL_LIB:-/opt/colossul}/lib/common.sh"
+[ -f "$_LIB" ] || _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+# shellcheck source=../lib/common.sh
+source "$_LIB"
+
+N="${1:-$(num_seats)}"
+case "$N" in ''|*[!0-9]*) die "usage: colossul-portal-config [seat-count] [--backends]" ;; esac
+
+WITH_BACKENDS=0
+for a in "$@"; do [ "$a" = "--backends" ] && WITH_BACKENDS=1; done
+
+entries="localhost:1111:11111:/:Instance Portal|localhost:8080:18080:/:Jupyter"
+port_list="1111
+8080"
+
+for ((i = 0; i < N; i++)); do
+    # Storyrendr first so it reads as the primary entry in the portal listing.
+    entries="${entries}|localhost:$(frontend_ext "$i"):$(frontend_int "$i"):/:Seat $i Storyrendr"
+    entries="${entries}|localhost:$(comfyui_ext "$i"):$(comfyui_int "$i"):/:Seat $i ComfyUI"
+    port_list="${port_list}
+$(frontend_ext "$i")
+$(comfyui_ext "$i")"
+    if [ "$WITH_BACKENDS" = "1" ]; then
+        entries="${entries}|localhost:$(backend_ext "$i"):$(backend_int "$i"):/docs:Seat $i API docs"
+        port_list="${port_list}
+$(backend_ext "$i")"
+    fi
+done
+
+# Ascending, so the list can be pasted into the template and eyeballed.
+ports="$(printf '%s\n' "$port_list" | sort -un | paste -sd, -)"
+
+echo ""
+echo "# PORTAL_CONFIG for $N seat(s) — paste into the Vast template environment:"
+echo ""
+echo "PORTAL_CONFIG=\"${entries}\""
+echo ""
+echo "# Ports to expose in the template:"
+echo ""
+echo "${ports}"
+echo ""
+if [ "$WITH_BACKENDS" != "1" ]; then
+    echo "# Backends stay on loopback — the frontend proxies /api to them. Pass"
+    echo "# --backends to expose each seat's FastAPI /docs as well."
+    echo ""
+fi

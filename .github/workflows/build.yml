@@ -1,0 +1,119 @@
+name: build
+
+# Publishes the multi-seat image to GHCR so a Vast template can point at it.
+# Vast pulls a Docker image, not a git repo, so this workflow — not the push
+# itself — is what makes a commit launchable.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: "Base image to build from"
+        required: false
+        default: "vastai/comfy:v0.30.0-cuda-13.2-py312"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DEFAULT_BASE: "vastai/comfy:v0.30.0-cuda-13.2-py312"
+
+jobs:
+  # Fast feedback: the topology and argument checks need no Docker and no
+  # private source, so they gate the expensive build.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run checks
+        run: bash tests/run-all.sh
+
+      - name: Verify seat scripts are executable in git
+        # The image chmods at build time, but a non-exec bit here usually means
+        # someone edited over a Windows mount and lost it silently.
+        run: |
+          for f in scripts/provision.sh scripts/seat-*.sh scripts/bin/*; do
+            mode=$(git ls-files -s "$f" | cut -d' ' -f1)
+            echo "$mode  $f"
+            [ "$mode" = "100755" ] || { echo "::error file=$f::not executable in git (expected 100755, got $mode)"; exit 1; }
+          done
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    # Don't publish from forks/PRs — they can't have registry write anyway.
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # The base image is ~7.5 GB compressed and much larger unpacked, which
+      # overruns a stock runner. Reclaiming the preinstalled toolchains buys
+      # roughly 25 GB and is the difference between a build and a disk error.
+      - name: Free disk space
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/lib/node_modules \
+                      /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          echo "after:"; df -h / | tail -1
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Vast hosts are linux/amd64; never inherit the runner's arch.
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ github.event.inputs.base_image || env.DEFAULT_BASE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Image published"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "Point the Vast template at one of the tags above."
+            echo ""
+            echo "> First publish only: the GHCR package is **private** by default."
+            echo "> Vast hosts cannot pull it until you set the package to public"
+            echo "> (Packages → this package → Package settings → Change visibility),"
+            echo "> or add registry credentials to the template."
+          } >> "$GITHUB_STEP_SUMMARY"

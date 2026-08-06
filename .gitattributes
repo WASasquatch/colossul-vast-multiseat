@@ -1,0 +1,9 @@
+# Everything in this image runs on Linux. A CRLF shebang produces the
+# infamous "bad interpreter: /usr/bin/env bash^M", so pin LF regardless of
+# the platform a contributor edits on.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf
+scripts/bin/* text eol=lf

@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Operator CLI for the Colossul multi-seat instance.
+#
+#   colossul-seats status          per-seat process state
+#   colossul-seats urls            the URL to hand each employee
+#   colossul-seats logs 2          tail seat 2's three services
+#   colossul-seats restart 2       recycle one employee's stack
+#   colossul-seats restart all     recycle every seat
+#   colossul-seats gpu             nvidia-smi, annotated with seat ownership
+#   colossul-seats provision       re-run provisioning (picks up new commits)
+#   colossul-seats rebuild         force a full rebuild, then re-provision
+set -euo pipefail
+
+# Resolve the shared lib from the installed location, falling back to the
+# repo layout so the CLI can be exercised without building the image.
+_LIB="${COLOSSUL_LIB:-/opt/colossul}/lib/common.sh"
+[ -f "$_LIB" ] || _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/common.sh"
+# shellcheck source=../lib/common.sh
+source "$_LIB"
+
+SEAT_COUNT="$(num_seats)"
+[ -f "$RUNTIME_ENV" ] && source "$RUNTIME_ENV"
+SEAT_COUNT="${NUM_SEATS:-$SEAT_COUNT}"
+
+# Print the header comment block as help. Derived from the file rather than a
+# fixed line range so editing the commands can't desync the help text.
+usage() { awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; }
+
+require_seat() {
+    local s="${1:-}"
+    [ -n "$s" ] || die "a seat index (0..$((SEAT_COUNT - 1))) is required"
+    case "$s" in ''|*[!0-9]*) die "'$s' is not a seat index" ;; esac
+    [ "$s" -lt "$SEAT_COUNT" ] || die "seat $s does not exist (this instance has $SEAT_COUNT seats)"
+}
+
+# Public host for the URLs. Vast exposes the instance address via these vars;
+# fall back to a placeholder rather than printing something wrong.
+public_host() {
+    echo "${PUBLIC_IPADDR:-${VAST_IP_ADDR:-<instance-host>}}"
+}
+
+cmd_status() {
+    local i
+    for ((i = 0; i < SEAT_COUNT; i++)); do
+        echo "── seat $i  (GPU $(gpu_for_seat "$i")) ─────────────────────────────"
+        supervisorctl status "seat${i}:" 2>/dev/null || echo "  not registered — run: colossul-seats provision"
+    done
+}
+
+cmd_urls() {
+    local host i map tunnel
+    host="$(public_host)"
+    map="$(tunnel_map)"
+
+    echo ""
+    echo "  Hand each employee ONE link — the Storyrendr URL is all they need."
+    echo "  Every seat shares the instance credential (user 'vastai', password"
+    echo "  \$OPEN_BUTTON_TOKEN / \$WEB_PASSWORD), and portal links embed an access"
+    echo "  token — so a shared link is a shared seat."
+    echo ""
+
+    if [ -n "$map" ]; then
+        printf "  %-5s %-4s %s\n" "SEAT" "GPU" "STORYRENDR (public tunnel)"
+        for ((i = 0; i < SEAT_COUNT; i++)); do
+            tunnel="$(printf '%s\n' "$map" | awk -v p="$(frontend_ext "$i")" -F'\t' '$1==p {print $2; exit}')"
+            printf "  %-5s %-4s %s\n" "$i" "$(gpu_for_seat "$i")" \
+                "${tunnel:-<no tunnel yet - check the Instance Portal>}"
+        done
+        echo ""
+        echo "  Direct (needs the port open in the template):"
+    else
+        echo "  (tunnel_manager unreachable — showing direct addresses only)"
+        echo ""
+    fi
+
+    printf "  %-5s %-4s %-34s %s\n" "SEAT" "GPU" "STORYRENDR" "COMFYUI"
+    for ((i = 0; i < SEAT_COUNT; i++)); do
+        printf "  %-5s %-4s %-34s %s\n" \
+            "$i" "$(gpu_for_seat "$i")" \
+            "https://${host}:$(frontend_ext "$i")" \
+            "https://${host}:$(comfyui_ext "$i")"
+    done
+    echo ""
+    if [ "$host" = "<instance-host>" ]; then
+        echo "  Note: the instance address wasn't in the environment. Use the tunnel"
+        echo "        URLs above, or the address on your Vast instance card."
+        echo ""
+    fi
+}
+
+cmd_logs() {
+    local seat="${1:-}"
+    require_seat "$seat"
+    local files=()
+    local svc
+    for svc in comfyui backend frontend; do
+        local f="/var/log/portal/seat${seat}-${svc}.log"
+        [ -f "$f" ] && files+=("$f")
+    done
+    [ "${#files[@]}" -gt 0 ] || die "no logs yet for seat $seat"
+    tail -n 60 -F "${files[@]}"
+}
+
+cmd_restart() {
+    local target="${1:-}"
+    if [ "$target" = "all" ]; then
+        local i
+        for ((i = 0; i < SEAT_COUNT; i++)); do
+            log "restarting seat $i ..."
+            supervisorctl restart "seat${i}:" || warn "seat $i restart reported an error"
+        done
+        return 0
+    fi
+    require_seat "$target"
+    log "restarting seat $target ..."
+    supervisorctl restart "seat${target}:"
+}
+
+cmd_gpu() {
+    command -v nvidia-smi >/dev/null 2>&1 || die "nvidia-smi is unavailable in this container"
+    echo ""
+    echo "  Seat → GPU assignment:"
+    local i
+    for ((i = 0; i < SEAT_COUNT; i++)); do
+        echo "    seat $i  ->  GPU $(gpu_for_seat "$i")"
+    done
+    echo ""
+    nvidia-smi
+}
+
+case "${1:-}" in
+    status)    shift; cmd_status "$@" ;;
+    urls)      shift; cmd_urls "$@" ;;
+    logs)      shift; cmd_logs "$@" ;;
+    restart)   shift; cmd_restart "$@" ;;
+    gpu)       shift; cmd_gpu "$@" ;;
+    provision) shift; exec /opt/colossul/provision.sh ;;
+    rebuild)   shift; FORCE_REPROVISION=1 exec /opt/colossul/provision.sh ;;
+    ""|-h|--help|help) usage ;;
+    *)         echo "unknown command: $1" >&2; echo "" >&2; usage >&2; exit 2 ;;
+esac
