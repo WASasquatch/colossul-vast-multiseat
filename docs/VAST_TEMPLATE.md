@@ -17,19 +17,20 @@ Template" form on [cloud.vast.ai](https://cloud.vast.ai/templates/).
 ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 ```
 
-The image must be pullable by the host. **GHCR publishes packages private by
-default, even from a public repo** — a Vast host cannot pull a private image and
-the instance will fail to start. After the first successful CI build, set the
-package to public:
+Published automatically by CI and **publicly pullable** — verified anonymously,
+so a Vast host needs no registry credentials. Available tags:
 
-> Repo → **Packages** → `colossul-vast-multiseat` → **Package settings** →
-> **Change visibility** → **Public**
+| Tag | Use |
+|---|---|
+| `latest` | tracks `main` — fine for testing |
+| `sha-<short>` | **pin this for production**, so a later push can't change what your template launches |
+| `main` | same as `latest` |
 
-Confirm with `docker manifest inspect ghcr.io/wasasquatch/colossul-vast-multiseat:latest`
-from a machine that isn't logged in to GHCR.
-
-To keep it private instead, add GHCR credentials (a PAT with `read:packages`) in
-the template's registry authentication section.
+If a host ever reports `denied` or `manifest unknown`, the package visibility
+was changed: Repo → **Packages** → `colossul-vast-multiseat` → **Package
+settings** → **Change visibility** → **Public**. To deliberately keep it
+private, add GHCR credentials (a PAT with `read:packages`) in the template's
+registry authentication section instead.
 
 **Launch mode:** `Run interactive shell server, SSH` (the default for the Vast
 base images). Do **not** override the entrypoint — supervisord must remain PID 1

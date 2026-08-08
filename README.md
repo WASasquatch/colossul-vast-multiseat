@@ -175,24 +175,28 @@ The app is built on the instance rather than baked into the image because the
 Storyrendr source is private and fetched at runtime — that's what keeps this
 repo and image publishable, and lets you ship code changes without a rebuild.
 
-### Step 1 — Get the image published (one time)
+### Step 1 — Get the image published (automatic)
 
-Already automatic: pushing to `main` builds and publishes
-`ghcr.io/wasasquatch/colossul-vast-multiseat:latest`. Watch it under
-[Actions](https://github.com/WASasquatch/colossul-vast-multiseat/actions).
+Pushing to `main` builds and publishes the image. Nothing else to do — the
+package inherits this repo's public visibility, so Vast hosts can pull it
+anonymously. Tags published on each push:
 
-**One manual step after the first successful build:** GHCR publishes the
-package *private* by default, even from a public repo, and Vast hosts cannot
-pull a private image. Make it public:
+```
+ghcr.io/wasasquatch/colossul-vast-multiseat:latest
+ghcr.io/wasasquatch/colossul-vast-multiseat:main
+ghcr.io/wasasquatch/colossul-vast-multiseat:sha-<short>   <- pin this for production
+```
 
-> Repo → **Packages** → `colossul-vast-multiseat` → **Package settings** →
-> **Change visibility** → **Public**
-
-Verify anyone can pull it:
+Watch builds under
+[Actions](https://github.com/WASasquatch/colossul-vast-multiseat/actions). To
+confirm a host can pull it, from a machine *not* logged in to GHCR:
 
 ```bash
 docker manifest inspect ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 ```
+
+If that ever fails with `denied`, the package visibility has been changed —
+fix it under Repo → **Packages** → **Package settings** → **Change visibility**.
 
 (Local building with `./build.sh` is only for iterating on the Dockerfile — it
 is not part of deployment.)
