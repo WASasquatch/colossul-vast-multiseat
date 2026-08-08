@@ -258,8 +258,15 @@ link — and see the sharing warning at the top of this README.
 No image rebuild, no new template:
 
 ```bash
-colossul-seats provision && colossul-seats restart all
+colossul-seats provision
 ```
+
+That fetches the new commit, rebuilds, and **restarts the seats itself** when
+the build actually changed. (`supervisorctl update` alone wouldn't: it only
+restarts programs whose *config* changed, and the seat configs are identical
+across a source update — so the seats would have carried on serving the old
+build.) Nothing restarts when there's nothing new, so re-running it is safe
+while artists are working.
 
 ---
 
@@ -363,11 +370,18 @@ Paste both into the template alongside `NUM_SEATS=6`.
 tests/run-all.sh [path/to/colossul-frontend]
 ```
 
-Runs everything; no Docker build required. Individually:
+Runs everything; no Docker build required. CI additionally runs **shellcheck**
+at `warning` level over every script — string/array confusion in a shell script
+is exactly what produced the empty-argument bug above, and a linter catches that
+class of thing where a behavioural test only catches one instance of it.
+
+Individually:
 
 | Check | Guards |
 |---|---|
 | `tests/check-parallelism.sh` | The core requirement: **N ComfyUI processes, one per GPU**, with distinct ports and distinct writable paths, and each backend/frontend resolving its ComfyUI from its own seat index. Fails if anything writable ever becomes shared. |
+| `tests/check-seat-argv.sh` | Runs the **real** seat scripts against a stub interpreter and asserts the exact argv and environment: no stray empty argument (argparse rejects one, and it stopped every seat from starting), correct per-seat ports/dirs/database, GPU pinning, `GPU_MAP`, glob safety, and that `COLOSSUL_ASSETS_ROOT` overrides actually take effect. |
+| `tests/check-update-path.sh` | That `colossul-seats provision` genuinely ships a change: the patched (always-dirty) tree doesn't block the update, the patch is re-applied afterwards, and seats are restarted so they serve the new build. |
 | `tests/check-topology.sh` | Ports never collide (1–8 seats) **and never hit a base-image service**; generated supervisor units are valid INI with the right start order and real script paths; seats map to distinct GPUs; **the `PORTAL_CONFIG` baked into the Dockerfile and the port list in the docs both still match the port math**. |
 | `tests/check-args.sh` | The base image's `COMFYUI_ARGS` can never smuggle a `--port` into a seat; all nine seat-owned flags are stripped in both `--flag value` and `--flag=value` form; each seat still gets its own `--database-url`. |
 | `tests/check-tunnels.sh` | `colossul-seats urls` maps each seat to **its own** tunnel and never another seat's; an unmapped port yields empty rather than a wrong URL; malformed payloads degrade quietly. |

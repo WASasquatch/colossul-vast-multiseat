@@ -51,7 +51,18 @@ if ! assert_no_reserved_collisions "$SEAT_COUNT"; then
        Reserved: $RESERVED_PORTS"
 fi
 
-mkdir -p "$COLOSSUL_ETC" "$COLOSSUL_ROOT" "$SEATS_DIR" "$(dirname "$SRC_DIR")" /var/log/portal
+mkdir -p "$COLOSSUL_ETC" "$COLOSSUL_ROOT" "$SEATS_DIR" "$(dirname "$SRC_DIR")"
+mkdir -p /var/log/portal 2>/dev/null || true   # cosmetic; never fatal
+
+# Fail early and clearly if a build tool is missing, rather than 15 minutes
+# later inside npm with an error that doesn't name the real problem.
+missing=""
+for tool in git uv node npm ffmpeg; do
+    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+done
+[ -z "$missing" ] || die "required tool(s) not found:$missing
+       These are baked into the image, so this usually means the template
+       overrode the entrypoint or the image was built from an unexpected base."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Discover ComfyUI
@@ -116,10 +127,18 @@ git_auth() {
 
 if [ -d "$SRC_DIR/.git" ]; then
     log "Updating existing source checkout ($STORYRENDR_REF)..."
-    git_auth -C "$SRC_DIR" fetch --depth 1 origin "$STORYRENDR_REF" \
-        || warn "git fetch failed — continuing with the existing checkout."
-    git -C "$SRC_DIR" checkout -q FETCH_HEAD 2>/dev/null \
-        || warn "Could not fast-forward to FETCH_HEAD — continuing with the existing checkout."
+    if git_auth -C "$SRC_DIR" fetch --depth 1 origin "$STORYRENDR_REF"; then
+        # reset --hard, NOT checkout. We patch vite.config.ts in the working
+        # tree, so the tree is always dirty; `git checkout` refuses to overwrite
+        # a modified file and provisioning would only warn — leaving the
+        # instance silently running old code. The tree is disposable: the patch
+        # is re-applied below, and node_modules/.venv/dist are untracked so
+        # reset does not touch them.
+        git -C "$SRC_DIR" reset --hard -q FETCH_HEAD \
+            || warn "Could not reset to FETCH_HEAD — continuing with the existing checkout."
+    else
+        warn "git fetch failed — continuing with the existing checkout."
+    fi
 else
     if [ -z "${GITHUB_TOKEN:-}" ]; then
         die "storyrender-services is a private repository and no GITHUB_TOKEN was provided.
@@ -159,11 +178,16 @@ if [ "${FORCE_REPROVISION:-0}" != "1" ] \
     log "Build is current for $SRC_SHA — skipping (FORCE_REPROVISION=1 to rebuild)."
 fi
 
-if [ "$NEED_BUILD" = "1" ]; then
-    log "Patching the frontend to accept a per-seat backend URL..."
-    "$COMFYUI_PYTHON" /opt/colossul/patches/patch_vite_backend_url.py "$FRONTEND_DIR/vite.config.ts" \
-        || die "vite.config.ts patch failed — see the error above. The upstream proxy target may have changed."
+# Applied on EVERY provision, not just when rebuilding. vite.config.ts is read
+# by the preview server at runtime, and the `reset --hard` above wipes the
+# patch — so skipping it on a no-change re-provision would leave every seat
+# proxying /api to the stock 127.0.0.1:8189, which nothing listens on. The
+# patch is idempotent, so re-running costs nothing.
+log "Patching the frontend to accept a per-seat backend URL..."
+"$COMFYUI_PYTHON" "$COLOSSUL_LIB/patches/patch_vite_backend_url.py" "$FRONTEND_DIR/vite.config.ts" \
+    || die "vite.config.ts patch failed — see the error above. The upstream proxy target may have changed."
 
+if [ "$NEED_BUILD" = "1" ]; then
     log "Syncing the backend virtualenv (uv sync)..."
     ( cd "$BACKEND_DIR" && uv sync ) || die "uv sync failed in $BACKEND_DIR"
 
@@ -294,6 +318,10 @@ done
 # surplus seats — `supervisorctl update` drops programs whose config vanished.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Generating supervisor units..."
+# Were seats already registered? Distinguishes first boot (update will start
+# them) from a re-provision (update leaves identical configs alone).
+SEATS_EXISTED=0
+compgen -G "/etc/supervisor/conf.d/colossul-seat*.conf" >/dev/null && SEATS_EXISTED=1
 rm -f /etc/supervisor/conf.d/colossul-seat*.conf
 
 for ((i = 0; i < SEAT_COUNT; i++)); do
@@ -308,6 +336,18 @@ if ! supervisorctl status >/dev/null 2>&1; then
 fi
 supervisorctl reread
 supervisorctl update
+
+# `supervisorctl update` only (re)starts programs whose CONFIG changed. After a
+# source update the configs are identical, so without this the seats would keep
+# serving the old build and `colossul-seats provision` would look like it worked
+# while changing nothing.
+if [ "$SEATS_EXISTED" = "1" ] && [ "$NEED_BUILD" = "1" ]; then
+    log "New build — restarting seats so they pick it up..."
+    for ((i = 0; i < SEAT_COUNT; i++)); do
+        supervisorctl restart "seat${i}:" >/dev/null 2>&1 \
+            || warn "seat $i did not restart cleanly — check: colossul-seats logs $i"
+    done
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 9. Summary

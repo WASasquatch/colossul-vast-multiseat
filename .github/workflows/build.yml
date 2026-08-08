@@ -30,6 +30,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Static analysis first: it catches whole classes of shell bug (unquoted
+      # expansions, string/array confusion) that the behavioural tests can only
+      # catch one instance of.
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --version
+          shellcheck -x -S warning \
+            scripts/provision.sh scripts/seat-*.sh scripts/lib/common.sh \
+            scripts/bin/colossul-seats scripts/bin/colossul-portal-config \
+            build.sh tests/*.sh
+
       - name: Run checks
         run: bash tests/run-all.sh
 

@@ -19,6 +19,7 @@ _LIB="${COLOSSUL_LIB:-/opt/colossul}/lib/common.sh"
 source "$_LIB"
 
 SEAT_COUNT="$(num_seats)"
+# shellcheck disable=SC1090  # generated at provision time
 [ -f "$RUNTIME_ENV" ] && source "$RUNTIME_ENV"
 SEAT_COUNT="${NUM_SEATS:-$SEAT_COUNT}"
 

@@ -6,7 +6,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit 1
 
 PY="${PYTHON:-python3}"
 # Don't leave __pycache__ in the build context just for a syntax check.
@@ -34,6 +34,12 @@ fi
 
 note "PARALLELISM"
 bash tests/check-parallelism.sh || rc=1
+
+note "SEAT LAUNCH (end-to-end argv)"
+bash tests/check-seat-argv.sh || rc=1
+
+note "UPDATE PATH"
+bash tests/check-update-path.sh || rc=1
 
 note "TOPOLOGY"
 bash tests/check-topology.sh || rc=1

@@ -51,10 +51,22 @@ got="$(san --listen --highvram)"
 echo "PASS: optional-value flags don't swallow the following flag"
 
 echo ""
-echo "=== 5. empty input is safe ==="
-got="$(san)"
-[ -z "$got" ] || fail "expected empty output, got: '$got'"
-echo "PASS: no args produces no output"
+echo "=== 5. empty input produces ZERO arguments, not one empty one ==="
+# Deliberately checked as an ARRAY, exactly as seat-comfyui.sh consumes it.
+# An earlier version of this test joined the output into a string first, which
+# hid a real bug: the function emitted one empty line, mapfile turned it into a
+# single empty-string argument, and argparse rejects a stray empty arg — so
+# every seat's ComfyUI failed to start with no extras set, i.e. by default.
+mapfile -t EMPTY < <(sanitize_comfyui_args)
+[ "${#EMPTY[@]}" -eq 0 ] \
+    || fail "expected 0 arguments, got ${#EMPTY[@]}: $(printf '%q ' "${EMPTY[@]}")"
+mapfile -t ONE < <(sanitize_comfyui_args --highvram)
+[ "${#ONE[@]}" -eq 1 ] || fail "expected 1 argument, got ${#ONE[@]}"
+# Stripping the only argument must also leave nothing behind.
+mapfile -t STRIPPED < <(sanitize_comfyui_args --port 18188)
+[ "${#STRIPPED[@]}" -eq 0 ] \
+    || fail "stripping the only arg left ${#STRIPPED[@]} behind: $(printf '%q ' "${STRIPPED[@]}")"
+echo "PASS: 0 args -> 0 elements; 1 arg -> 1; fully-stripped -> 0"
 
 echo ""
 echo "=== 6. the seat script never passes COMFYUI_ARGS through ==="

@@ -37,7 +37,13 @@ DB_PATH="$D/comfyui/user/comfyui.db"
 # Extras come from COLOSSUL_COMFYUI_ARGS, never the base image's COMFYUI_ARGS:
 # that variable is preset to "... --port 18188" for the stock single instance,
 # and argparse's last-wins would pin every seat to the same port.
+#
+# The expansion is deliberately unquoted so extras word-split into separate
+# arguments; `set -f` stops them also being glob-expanded against the ComfyUI
+# directory, which would turn a stray `*` into a screenful of filenames.
+set -f
 mapfile -t EXTRA_ARGS < <(sanitize_comfyui_args ${COLOSSUL_COMFYUI_ARGS:-})
+set +f
 
 # Point this seat at the shared model store. --extra-model-paths-config appends,
 # so the generated config and an operator-authored one both apply, as does any
