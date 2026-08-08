@@ -155,7 +155,27 @@ while IFS= read -r doc; do
 done < <(find "$ROOT" -name '*.md' -not -path '*/.git/*')
 
 [ "$checked" -gt 0 ] || fail "no port list found in any doc - has the format changed?"
-echo "PASS: all $checked documented port list(s) match the ports the seats bind"
+
+# Also check docker "-p 8190:8190 ..." style lists. QUICK_START.md states the
+# ports that way, and it is the doc a non-technical operator copies from - a
+# stale entry there means an artist silently has no working link.
+dockerfmt=0
+while IFS= read -r doc; do
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        found="$(printf '%s' "$line" | grep -oE '\-p [0-9]+:[0-9]+' | grep -oE '[0-9]+:' | tr -d ':' | paste -sd, -)"
+        [ -n "$found" ] || continue
+        dockerfmt=$((dockerfmt + 1))
+        if [ "$(norm "$found")" != "$want" ]; then
+            echo "  in $doc:"
+            echo "    documented: $(norm "$found")"
+            echo "    generated : $want"
+            fail "a '-p' port list has drifted from the port math"
+        fi
+    done < <(grep -E '(\-p [0-9]+:[0-9]+.*){4,}' "$doc" || true)
+done < <(find "$ROOT" -name '*.md' -not -path '*/.git/*')
+
+echo "PASS: $checked comma-style and $dockerfmt docker-style port list(s) all match"
 
 echo ""
 echo "ALL TOPOLOGY CHECKS PASSED"

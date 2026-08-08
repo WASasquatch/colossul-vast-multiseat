@@ -162,6 +162,10 @@ prompt — convenient, and the reason a shared link is a shared seat.
 
 ## Deploying
 
+> **Not technical?** [docs/QUICK_START.md](docs/QUICK_START.md) is a
+> click-by-click, no-terminal walkthrough for producers and artists. The rest of
+> this section is the engineering view.
+
 **You never build anything on Vast.** Vast only *pulls* a prebuilt image and
 runs it. Two different things get built, at two different times — that
 distinction is the thing to get straight:
@@ -211,7 +215,7 @@ Full field list in [docs/VAST_TEMPLATE.md](docs/VAST_TEMPLATE.md). The essential
 | Ports | `1111,8080,8190,8191,8200,8201,8210,8211,8220,8221` |
 | Env | `GITHUB_TOKEN=<fine-grained PAT, Contents:Read on storyrender-services>` |
 | Disk | 150 GB+ |
-| Launch mode | SSH / Jupyter (leave the entrypoint alone) |
+| Launch mode | **`Docker ENTRYPOINT`** — the other modes replace the entrypoint and nothing starts |
 
 > The port list is **not optional**, and getting it wrong fails silently. Caddy
 > skips any portal entry whose `VAST_TCP_PORT_<external>` variable is missing,

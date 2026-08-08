@@ -32,9 +32,17 @@ settings** → **Change visibility** → **Public**. To deliberately keep it
 private, add GHCR credentials (a PAT with `read:packages`) in the template's
 registry authentication section instead.
 
-**Launch mode:** `Run interactive shell server, SSH` (the default for the Vast
-base images). Do **not** override the entrypoint — supervisord must remain PID 1
-or nothing will start.
+**Launch mode:** `Docker ENTRYPOINT` — **this one is not optional.**
+
+The other two modes ("Jupyter + SSH" and "Interactive shell server, SSH")
+*replace* the image's entrypoint: per Vast's docs, "the docker entrypoint for
+your image will not be run. It will be replaced with our instance setup
+script." That would stop `/opt/instance-tools/bin/entrypoint.sh` from running,
+so supervisord never starts, so no seat ever starts — the instance boots and
+sits there doing nothing.
+
+You lose nothing by choosing `Docker ENTRYPOINT`: the base image starts SSH and
+Jupyter itself through its own supervisor units, so you still get both.
 
 ---
 
