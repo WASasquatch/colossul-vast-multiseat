@@ -160,35 +160,97 @@ prompt — convenient, and the reason a shared link is a shared seat.
 
 ---
 
-## Quick start
+## Deploying
 
-**1. Build and push** (Vast hosts must be able to pull it):
+**You never build anything on Vast.** Vast only *pulls* a prebuilt image and
+runs it. Two different things get built, at two different times — that
+distinction is the thing to get straight:
+
+| | What it builds | Where | When | Takes |
+|---|---|---|---|---|
+| **Image build** | the Docker image (Node, ffmpeg, scripts on top of `vastai/comfy`) | GitHub Actions | on every push to `main` | ~10 min, automatic |
+| **App build** | Storyrendr itself (`uv sync`, `npm ci`, `vite build`) | *inside the running instance* | first boot of each instance | 10–20 min, automatic |
+
+The app is built on the instance rather than baked into the image because the
+Storyrendr source is private and fetched at runtime — that's what keeps this
+repo and image publishable, and lets you ship code changes without a rebuild.
+
+### Step 1 — Get the image published (one time)
+
+Already automatic: pushing to `main` builds and publishes
+`ghcr.io/wasasquatch/colossul-vast-multiseat:latest`. Watch it under
+[Actions](https://github.com/WASasquatch/colossul-vast-multiseat/actions).
+
+**One manual step after the first successful build:** GHCR publishes the
+package *private* by default, even from a public repo, and Vast hosts cannot
+pull a private image. Make it public:
+
+> Repo → **Packages** → `colossul-vast-multiseat` → **Package settings** →
+> **Change visibility** → **Public**
+
+Verify anyone can pull it:
 
 ```bash
-./build.sh -t <your-registry>/colossul-multiseat:1.0 --push
+docker manifest inspect ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 ```
 
-**2. Create the Vast template** — see [docs/VAST_TEMPLATE.md](docs/VAST_TEMPLATE.md)
-for the exact fields. The essentials:
+(Local building with `./build.sh` is only for iterating on the Dockerfile — it
+is not part of deployment.)
 
-- Image: `<your-registry>/colossul-multiseat:1.0`
-- Ports: `1111,8080,8190,8191,8200,8201,8210,8211,8220,8221`
-- Env: `GITHUB_TOKEN=<PAT with repo:read>`
-- Disk: 150 GB+
+### Step 2 — Create the Vast template (one time)
 
-> The port list is **not optional**. Caddy skips any portal entry whose
-> `VAST_TCP_PORT_<external>` variable is missing, and Vast only sets that for
-> ports declared in the template — so an undeclared seat is simply unreachable.
+Full field list in [docs/VAST_TEMPLATE.md](docs/VAST_TEMPLATE.md). The essentials:
+
+| Field | Value |
+|---|---|
+| Image | `ghcr.io/wasasquatch/colossul-vast-multiseat:latest` |
+| Ports | `1111,8080,8190,8191,8200,8201,8210,8211,8220,8221` |
+| Env | `GITHUB_TOKEN=<fine-grained PAT, Contents:Read on storyrender-services>` |
+| Disk | 150 GB+ |
+| Launch mode | SSH / Jupyter (leave the entrypoint alone) |
+
+> The port list is **not optional**, and getting it wrong fails silently. Caddy
+> skips any portal entry whose `VAST_TCP_PORT_<external>` variable is missing,
+> and Vast only sets that for ports declared here — so an undeclared seat has no
+> URL and no tunnel, while its processes run perfectly.
 > See [Ports, tunnels, and auth](#ports-tunnels-and-auth).
 
-**3. Rent a 4-GPU machine** and launch. First boot clones and builds
-Storyrendr (10–20 min, visible in the instance logs). Later restarts reuse the
-build and come up in under a minute.
+### Step 3 — Rent a 4-GPU machine and launch
 
-**4. Hand out the URLs:**
+Boot order, all automatic:
+
+```
+Vast pulls the image
+  └─ supervisord starts                       (/.provisioning held)
+       ├─ your PROVISIONING_SCRIPT, if set    <- model downloads go here
+       └─ Colossul provisioning               <- clone + build Storyrendr, 10-20 min
+            └─ 4 seats start, one per GPU
+```
+
+Follow it in the instance **Logs** tab; look for `[colossul]` lines. It ends with:
+
+```
+[colossul] Provisioning complete — 4 seat(s) starting
+[colossul]   Seat 0  GPU 0  Storyrendr :8190   ComfyUI :8191
+```
+
+Restarting a stopped instance skips the app build and comes up in under a minute.
+
+### Step 4 — Hand out the URLs
 
 ```bash
 colossul-seats urls
+```
+
+Each seat has its own auto-created Cloudflare tunnel. Give each employee one
+link — and see the sharing warning at the top of this README.
+
+### Shipping a Storyrendr change later
+
+No image rebuild, no new template:
+
+```bash
+colossul-seats provision && colossul-seats restart all
 ```
 
 ---

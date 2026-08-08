@@ -3,17 +3,33 @@
 Exact settings for a 4-seat Colossul instance. Fields map to the "Create
 Template" form on [cloud.vast.ai](https://cloud.vast.ai/templates/).
 
+> **Nothing is built on Vast.** Vast pulls a prebuilt image and runs it. The
+> image is built by GitHub Actions on every push to `main`; the Storyrendr
+> application is then built *inside* the instance on first boot, because its
+> source is private and fetched at runtime. Both are automatic — see
+> [Deploying](../README.md#deploying).
+
 ---
 
 ## 1. Image
 
 ```
-<your-registry>/colossul-multiseat:1.0
+ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 ```
 
-The image must be pullable by the host. Public registries work as-is; for a
-private one, add the registry credentials in the template's authentication
-section.
+The image must be pullable by the host. **GHCR publishes packages private by
+default, even from a public repo** — a Vast host cannot pull a private image and
+the instance will fail to start. After the first successful CI build, set the
+package to public:
+
+> Repo → **Packages** → `colossul-vast-multiseat` → **Package settings** →
+> **Change visibility** → **Public**
+
+Confirm with `docker manifest inspect ghcr.io/wasasquatch/colossul-vast-multiseat:latest`
+from a machine that isn't logged in to GHCR.
+
+To keep it private instead, add GHCR credentials (a PAT with `read:packages`) in
+the template's registry authentication section.
 
 **Launch mode:** `Run interactive shell server, SSH` (the default for the Vast
 base images). Do **not** override the entrypoint — supervisord must remain PID 1
@@ -119,7 +135,20 @@ outlive the instance.
 
 ---
 
-## 6. First boot
+## 6. First boot — what to expect, and for how long
+
+| Phase | Duration | Where to watch |
+|---|---|---|
+| Vast pulls the image | 2–10 min, host-dependent | instance card status |
+| supervisord starts, `/.provisioning` held | seconds | Logs tab |
+| Your `PROVISIONING_SCRIPT` (model downloads) | yours | Logs tab |
+| Colossul provisioning: clone → `uv sync` → `npm ci` → `vite build` | **10–20 min** | Logs tab, `[colossul]` lines |
+| 4 seats start | ~1 min | `colossul-seats status` |
+
+Only the last two are ours. A stopped-and-restarted instance skips the build
+entirely and is up in under a minute.
+
+
 
 The boot order is fixed by the base image: supervisord starts, then Vast runs
 `PROVISIONING_SCRIPT`/`PROVISIONING_MANIFEST` while `/.provisioning` exists,
