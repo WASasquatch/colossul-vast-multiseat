@@ -28,6 +28,8 @@ MANIFEST="${MODEL_MANIFEST:-${COLOSSUL_LIB:-/opt/colossul}/models.txt}"
 FAILED=()
 SKIPPED=0
 FETCHED=0
+TMP_CONFLICTS="$(mktemp)"
+trap 'rm -f "$TMP_CONFLICTS"' EXIT
 
 # ── Manifest parsing ────────────────────────────────────────────────────────
 # Emits "set<TAB>dest<TAB>bytes<TAB>url" for every entry, so every consumer
@@ -206,6 +208,24 @@ done
 # ── Selection, and what is actually still missing ───────────────────────────
 SELECTED="$(parse_manifest | awk -F'\t' -v want="$(printf '%s\n' "${WANT[@]}" | paste -sd'|')" '
     $1 ~ "^(" want ")$"')"
+
+# Sets legitimately share files — a text encoder or VAE is listed by every model
+# family that needs it, so each set stands alone. Selecting two would otherwise
+# fetch the shared 7 GB encoder twice. Keep the first entry per destination, and
+# say so loudly if two entries claim the same path from DIFFERENT sources, which
+# is a manifest bug rather than an overlap.
+SELECTED="$(awk -F'\t' '
+    { if (!($2 in seen)) { seen[$2] = $4; order[++n] = $0 }
+      else if (seen[$2] != $4) conflict[$2] = seen[$2] "\n      vs " $4 }
+    END {
+        for (i = 1; i <= n; i++) print order[i]
+        for (d in conflict) printf "CONFLICT\t%s\t%s\n", d, conflict[d] > "/dev/stderr"
+    }' <<< "$SELECTED" 2>"$TMP_CONFLICTS")"
+if [ -s "${TMP_CONFLICTS:-/dev/null}" ]; then
+    warn "Two manifest entries want the same destination from different URLs:"
+    sed 's/^/    /' "$TMP_CONFLICTS" | while IFS= read -r l; do warn "$l"; done
+    warn "Using the first. Fix models.txt — one of them is wrong."
+fi
 
 # ── --check: prove the whole thing works without spending bandwidth ─────────
 # The point is to answer "will this work?" before committing to 40+ GB on a

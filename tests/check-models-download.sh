@@ -300,6 +300,42 @@ echo "  'default' selectable on its own, without dragging in named sets"
 echo "PASS: all/default selection works from both the CLI and MODEL_SETS"
 
 echo ""
+echo "=== 8f. a file shared by several sets is fetched ONCE ==="
+# Sets are self-contained on purpose — every model family lists the text encoder
+# and VAE it needs. Selecting two would otherwise download the same 7 GB encoder
+# twice and double-count it in the disk precheck.
+cat > "$T/shared.txt" <<EOF
+[one]
+models/text_encoders/shared.safetensors  $SMALL_SIZE  $BASE/small.bin
+models/vae/only-one.safetensors  $SMALL_SIZE  $BASE/small.bin
+
+[two]
+models/text_encoders/shared.safetensors  $SMALL_SIZE  $BASE/small.bin
+models/vae/only-two.safetensors  $SMALL_SIZE  $BASE/small.bin
+EOF
+out="$(MODEL_MANIFEST="$T/shared.txt" MODEL_SETS="" bash "$SH" --check one two 2>&1)"
+n=$(grep -c 'shared\.safetensors' <<< "$out")
+[ "$n" = "1" ] || fail "shared file listed $n times across two sets, expected 1: $out"
+# 3 distinct files, not 4.
+grep -qE "Would download $(( SMALL_SIZE * 3 / 1000000 ))" <<< "$out" \
+    || echo "  (total: $(grep -o 'Would download [^;]*' <<< "$out"))"
+echo "  shared destination collapsed to a single download"
+
+# But a genuine conflict — same destination, different sources — must be shouted
+# about, not silently resolved.
+cat > "$T/conflict.txt" <<EOF
+[a]
+models/vae/x.safetensors  $SMALL_SIZE  $BASE/small.bin
+[b]
+models/vae/x.safetensors  $SMALL_SIZE  $BASE/other-source.bin
+EOF
+out="$(MODEL_MANIFEST="$T/conflict.txt" MODEL_SETS="" bash "$SH" --check a b 2>&1)"
+grep -qi 'same destination' <<< "$out" \
+    || fail "two entries claiming one path from different URLs must be reported: $out"
+echo "  conflicting destinations reported instead of silently picking one"
+echo "PASS: shared files deduped, real conflicts surfaced"
+
+echo ""
 echo "=== 9. the token is never sent to a non-HuggingFace host ==="
 # Comments are stripped first — the script deliberately *mentions*
 # --location-trusted to explain why it must not be used.

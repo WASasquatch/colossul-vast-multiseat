@@ -92,9 +92,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 [minimax-h3]
 models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors  20970379616  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
-models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors         15687142551  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
-models/vae/minimax_h3_video_vae_fp16.safetensors                           5207808496  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors
-models/vae/minimax_h3_audio_vae_fp32.safetensors                            605254808  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors
+models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors  15687142551  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+models/vae/minimax_h3_video_vae_fp16.safetensors  5207808496  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_video_vae_fp16.safetensors
+models/vae/minimax_h3_audio_vae_fp32.safetensors  605254808  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/vae/minimax_h3_audio_vae_fp32.safetensors
 
 # Reference-image-to-video variant of the same model. Separate set because it is
 # another 21 GB and not every workflow needs it.
@@ -108,3 +108,125 @@ models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors  20970
 # where it comes from. That is all a new entry ever needs.
 #[minimax-h3-turbo]
 #models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LTX 2.3          https://docs.comfy.org/tutorials/video/ltx/ltx-2-3
+# ═════════════════════════════════════════════════════════════════════════════
+# The base set covers text-to-video, image-to-video and image-audio-to-video.
+# The three sets after it are add-ons that build on it — each assumes the shared
+# Gemma text encoder from here, so pair them with [ltx-2.3].
+#
+# 43.0 GB
+[ltx-2.3]
+models/checkpoints/ltx-2.3-22b-dev-fp8.safetensors  29145431166  https://huggingface.co/Lightricks/LTX-2.3-fp8/resolve/main/ltx-2.3-22b-dev-fp8.safetensors
+models/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors  2741024390  https://huggingface.co/Comfy-Org/ltx-2.3/resolve/main/split_files/loras/ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors
+models/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors  628203616  https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors
+models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors  9447702218  https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors
+models/latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.1.safetensors  995743560  https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-spatial-upscaler-x2-1.1.safetensors
+
+# First/last-frame to video. Needs the DISTILLED checkpoint, a separate 30 GB
+# file from the dev one above — this is not just a LoRA on top.  29.5 GB
+[ltx-2.3-flf2v]
+models/checkpoints/ltx-2.3-22b-distilled-fp8.safetensors  29531884062  https://huggingface.co/Lightricks/LTX-2.3-fp8/resolve/main/ltx-2.3-22b-distilled-fp8.safetensors
+models/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors  9447702218  https://huggingface.co/Comfy-Org/ltx-2/resolve/main/split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors
+
+# IC-LoRA union control (depth/pose/edge guidance). Also wants the distilled
+# checkpoint from [ltx-2.3-flf2v].  1.3 GB
+[ltx-2.3-ic-lora]
+models/loras/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors  654465352  https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors
+models/geometry_estimation/moge_2_vitl_normal_fp16.safetensors  661859924  https://huggingface.co/Comfy-Org/MoGe/resolve/main/geometry_estimation/moge_2_vitl_normal_fp16.safetensors
+
+# Identity LoRA (consistent character across shots).  1.2 GB
+[ltx-2.3-id-lora]
+models/loras/ltx-2.3-id-lora-talkvid-3k.safetensors  1157884304  https://huggingface.co/Comfy-Org/ltx-2.3/resolve/main/split_files/loras/ltx-2.3-id-lora-talkvid-3k.safetensors
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wan 2.2          https://docs.comfy.org/tutorials/video/wan/wan2_2
+# ═════════════════════════════════════════════════════════════════════════════
+# The 14B variants are split into high-noise and low-noise halves and BOTH are
+# required — the workflow chains them. That is why these sets are large.
+#
+# 5B hybrid, text+image to video. The cheapest way to try Wan 2.2.  18.1 GB
+[wan2.2-ti2v-5b]
+models/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors  9999658848  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors
+models/vae/wan2.2_vae.safetensors  1409400960  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors
+models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors  6735906897  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+
+# 14B text-to-video, fp8_scaled.  35.6 GB
+[wan2.2-t2v-14b]
+models/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors  14293923632  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
+models/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors  14293923632  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
+models/vae/wan_2.1_vae.safetensors  253815318  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
+models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors  6735906897  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+
+# 14B image-to-video, fp16. The heaviest Wan 2.2 set: two 28.6 GB halves.
+# 64.1 GB
+[wan2.2-i2v-14b]
+models/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors  28577914792  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp16.safetensors
+models/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors  28577914792  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp16.safetensors
+models/vae/wan_2.1_vae.safetensors  253815318  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
+models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors  6735906897  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wan 2.1          https://docs.comfy.org/tutorials/video/wan/wan-video
+# ═════════════════════════════════════════════════════════════════════════════
+# Base set: shared encoder/VAE/CLIP-vision plus the small 1.3B text-to-video
+# model. The i2v sets below add a 14B model each and reuse these.  11.1 GB
+[wan2.1]
+models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors  6735906897  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+models/vae/wan_2.1_vae.safetensors  253815318  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
+models/clip_vision/clip_vision_h.safetensors  1264219396  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors
+models/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors  2838303560  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors
+
+# Full-precision text encoder. Only if fp8 quality is not good enough — the fp8
+# one in [wan2.1] is what the tutorial defaults to.  11.4 GB
+[wan2.1-fp16-encoder]
+models/text_encoders/umt5_xxl_fp16.safetensors  11366399385  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp16.safetensors
+
+# 32.8 GB each — pick the resolution your artists actually use.
+[wan2.1-i2v-480p]
+models/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors  32791377504  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors
+
+[wan2.1-i2v-720p]
+models/diffusion_models/wan2.1_i2v_720p_14B_fp16.safetensors  32791377504  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_720p_14B_fp16.safetensors
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Wan 2.1 VACE     https://docs.comfy.org/tutorials/video/wan/vace
+# ═════════════════════════════════════════════════════════════════════════════
+# Reference-guided editing / control. Needs the encoder and VAE from [wan2.1].
+#
+# 34.7 GB
+[wan2.1-vace-14b]
+models/diffusion_models/wan2.1_vace_14B_fp16.safetensors  34675323640  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_vace_14B_fp16.safetensors
+models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors  6735906897  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+models/vae/wan_2.1_vae.safetensors  253815318  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
+
+# The small VACE module. Much lighter, and a reasonable place to start.  4.3 GB
+[wan2.1-vace-1.3b]
+models/diffusion_models/wan2.1_vace_1.3B_fp16.safetensors  4309519800  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_vace_1.3B_fp16.safetensors
+models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors  6735906897  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+models/vae/wan_2.1_vae.safetensors  253815318  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Qwen Image Edit 2511
+# https://docs.comfy.org/tutorials/image/qwen/qwen-image-edit-2511
+# ═════════════════════════════════════════════════════════════════════════════
+# Instruction-driven image editing. Includes the 4-step Lightning LoRA, which
+# the tutorial's own workflow uses.
+#
+# NOTE: the tutorial links the text encoder from Comfy-Org/HunyuanVideo_1.5_-
+# repackaged. The identical file (same name, same 9.38 GB) also lives in
+# Comfy-Org/Qwen-Image_ComfyUI, which is used here — same bytes, but a repo that
+# will not move out from under a Qwen workflow. Both were verified reachable.
+#
+# 51.3 GB
+[qwen-image-edit-2511]
+models/diffusion_models/qwen_image_edit_2511_bf16.safetensors  40861031560  https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors
+models/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors  9384670680  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
+models/vae/qwen_image_vae.safetensors  253806246  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors
+models/loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors  849608296  https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
