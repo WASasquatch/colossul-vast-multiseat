@@ -142,6 +142,15 @@ carry read-only access to public repositories.
 | Variable | Value | Why |
 |---|---|---|
 | `STORYRENDR_REF` | `main` | Pin the deployed branch/tag/SHA. |
+| `WEB_PASSWORD` | a password you choose | The login for every seat, ComfyUI, Jupyter and the portal. |
+
+> **Set `WEB_PASSWORD`.** Without it the password is the auto-generated
+> `OPEN_BUTTON_TOKEN`, which you can normally only read by SSHing in and running
+> `echo $OPEN_BUTTON_TOKEN` — and `Docker ENTRYPOINT` mode has no SSH. The Open
+> button still works (it sets the cookie for you), but if you ever need to hand
+> someone a bare URL, or the Open button is unavailable, a known `WEB_PASSWORD`
+> is the difference between getting in and rebuilding the instance. Username is
+> `vastai`.
 
 **Optional:**
 
@@ -264,6 +273,24 @@ remain separate.
 ---
 
 ## Troubleshooting
+
+**"Instance is running but has no web interface" / no Open button.**
+
+The instance is fine — Vast just doesn't know which port to open. That comes
+from `OPEN_BUTTON_PORT`, which the image now sets to `1111` (the Instance
+Portal). An instance created from an image built **before** that fix shows this
+message.
+
+To get into an already-running instance without the Open button:
+
+1. Click the **IP & Port Info** button (⇄) on the instance card.
+2. Find the host port mapped to container port **1111** and open
+   `http://<instance-ip>:<that port>`.
+3. Log in as `vastai` with your `WEB_PASSWORD` — or, if you didn't set one,
+   the auto-generated `OPEN_BUTTON_TOKEN`, which is awkward to retrieve without
+   SSH. This is why setting `WEB_PASSWORD` in the template is recommended.
+
+Port **1111 must be in the port list** for any of this to work.
 
 **The instance never starts: `nvidia-container-cli: device error: GPU-<uuid>:
 unknown device`.**

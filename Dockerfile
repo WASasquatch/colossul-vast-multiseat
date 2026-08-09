@@ -50,6 +50,13 @@ ENV NUM_SEATS=4 \
     STORYRENDR_REPO=https://github.com/WASasquatch/storyrender-services.git \
     STORYRENDR_REF=main
 
+# Which port Vast's "Open" button targets. Without it the console reports
+# "Instance is running but has no web interface" and offers no way in — the
+# base image doesn't set it, and neither does vastai/comfy, because their own
+# templates supply it. 1111 is the Instance Portal, which then links out to
+# every seat.
+ENV OPEN_BUTTON_PORT=1111
+
 # Instance Portal entries for the default 4 seats. Regenerate with
 # `colossul-portal-config <n>` if you change NUM_SEATS, and update the
 # template's exposed-port list to match.

@@ -126,6 +126,22 @@ fi
 echo "PASS: Dockerfile PORTAL_CONFIG agrees with the generator"
 
 echo ""
+echo "=== 5b. the Open button has a target ==="
+# Without OPEN_BUTTON_PORT the Vast console shows "Instance is running but has
+# no web interface" and gives the operator no way in at all.
+obp="$(grep -oE '^ENV OPEN_BUTTON_PORT=[0-9]+' "$ROOT/Dockerfile" | grep -oE '[0-9]+$' || true)"
+[ -n "$obp" ] || fail "Dockerfile must set OPEN_BUTTON_PORT or the instance has no Open button"
+gen_all="$(bash "$ROOT/scripts/bin/colossul-portal-config" 4)"
+# It must point at a port that is actually proxied...
+grep -q "localhost:$obp:" <<< "$gen_all" \
+    || fail "OPEN_BUTTON_PORT=$obp is not an external port in PORTAL_CONFIG"
+# ...and one the template actually exposes, or Caddy never serves it.
+grep -qE "(^|,)$obp(,|$)" \
+    <<< "$(grep -oE '^[0-9]+(,[0-9]+)+$' <<< "$gen_all" | head -1)" \
+    || fail "OPEN_BUTTON_PORT=$obp is not in the port list, so it would never be exposed"
+echo "PASS: OPEN_BUTTON_PORT=$obp is proxied and exposed"
+
+echo ""
 echo "=== 6. every documented port list matches PORTAL_CONFIG ==="
 # `|| true`: an empty grep result must reach the explicit check below rather
 # than tripping set -e and aborting with no explanation.

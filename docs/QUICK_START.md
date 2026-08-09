@@ -108,6 +108,17 @@ ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 
 **Template Visibility** — set to **Private**.
 
+**Environment Variables** — add one here (this is *not* the secret key; that
+went on your account in Step 2):
+
+| Key | Value |
+|---|---|
+| `WEB_PASSWORD` | a password you choose |
+
+> This becomes the password for every seat and for the file manager. Without it
+> the system generates a random one that is genuinely awkward to look up. The
+> username is always `vastai`.
+
 4. Click **Create**.
 
 Done. You never have to do Part 1 again.
@@ -235,6 +246,19 @@ and download.
 ---
 
 ## If something looks wrong
+
+**It says "Instance is running but has no web interface" and there's no
+Open button.**
+
+The server is running fine — Vast just doesn't know which page to open. This
+happens on instances created from an older version of our image.
+
+Quickest fix: **destroy it and rent again**, so you get the current image.
+
+To rescue the one you have:
+1. Click the **⇄** (IP & Port Info) button on the instance card.
+2. Find the line for port **1111** and open `http://<the address shown>`.
+3. Log in as `vastai` with the `WEB_PASSWORD` you set in the template.
 
 **The instance says "Error response from daemon ... nvidia-container-cli:
 device error: GPU-xxxx: unknown device".**
