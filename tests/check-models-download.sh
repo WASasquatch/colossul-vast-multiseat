@@ -12,6 +12,7 @@ export COLOSSUL_LIB="$ROOT/scripts"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL: $*"; exit 1; }
 SH="$ROOT/scripts/install-models.sh"
+PY="${PYTHON:-python3}"
 
 # A local file server, so these tests need no network and no HF token.
 mkdir -p "$T/srv"
@@ -453,6 +454,47 @@ echo "  token value never appears in the log output"
 kill "$(cat "$T/echo.pid" 2>/dev/null)" 2>/dev/null
 echo "  no --location-trusted in code; curl drops auth across hosts by default"
 echo "PASS: token is used where it should be, and never logged"
+
+echo ""
+echo "=== 9b. downloads NEVER block the seats from starting ==="
+# The default is now every set — hundreds of gigabytes. Downloading that inline
+# would leave four artists staring at a dead instance for an hour, for something
+# ComfyUI does not need in order to start.
+P="$ROOT/scripts/provision.sh"
+units_line=$(grep -n 'write_seat_unit' "$P" | head -1 | cut -d: -f1)
+models_line=$(grep -n 'write_models_unit' "$P" | head -1 | cut -d: -f1)
+[ -n "$units_line" ] && [ -n "$models_line" ] || fail "expected both unit writers in provision.sh"
+[ "$models_line" -gt "$units_line" ] \
+    || fail "model job is registered BEFORE the seats — seats must be queued first"
+grep -qE '^\s*"\$\{COLOSSUL_LIB\}/install-models.sh"' "$P" \
+    && fail "provision.sh still runs install-models.sh inline; that blocks seat startup"
+echo "  provisioning never invokes the downloader inline"
+
+# The unit must be a job, not a service: a finished download must not be
+# restarted forever, and a failure must not flap.
+"$PY" - "$ROOT" <<'PY' || fail "generated model unit is wrong"
+import re, subprocess, sys, os, tempfile
+root = sys.argv[1]
+out = tempfile.mktemp()
+script = f'''
+export COLOSSUL_LIB="{root}/scripts" WORKSPACE=/tmp/w COLOSSUL_ASSETS_ROOT=/tmp/w/a
+source "{root}/scripts/lib/common.sh"
+write_models_unit "{out}" "alpha,beta"
+'''
+subprocess.run(["bash", "-c", script], check=True, capture_output=True)
+cfg = open(out).read()
+os.unlink(out)
+def need(pat, why):
+    if not re.search(pat, cfg, re.M):
+        print(f"MISSING {pat}: {why}"); sys.exit(1)
+need(r'^\[program:colossul-models\]', "unit name")
+need(r'^autorestart=false',           "a finished download must not be restarted forever")
+need(r'^startsecs=0',                 "a fast no-op run must not count as a failed start")
+need(r'MODEL_SETS="alpha,beta"',      "the requested sets must reach the job")
+need(r'^stdout_logfile=/var/log/portal/models\.log', "must log where the portal shows it")
+PY
+echo "  unit is a one-shot job, logging where the portal can show it"
+echo "PASS: weights download behind the seats, never in front of them"
 
 echo ""
 echo "=== 10. the manifest carries no secrets and no expiring URLs ==="

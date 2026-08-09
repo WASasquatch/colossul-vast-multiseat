@@ -63,6 +63,19 @@ ENV COMFYUI_REF=v0.31.1
 # keep artists out of node installation.
 ENV ENABLE_COMFYUI_MANAGER=1
 
+# Which model sets to download at boot. "all" is every set in models.txt — the
+# whole studio library, so any workflow opens with its weights already present.
+#
+# Two things to know:
+#   - This is a LOT of data (see `colossul-seats models --list`). The download
+#     runs as a background job behind the seats, so artists can work while it
+#     lands, but a workflow opened early may still report Missing Models.
+#   - It is skip-if-complete. If ComfyUI_Assets lives on a persistent volume,
+#     the second and later boots re-download nothing.
+# Narrow it (-e MODEL_SETS=minimax-h3,wan2.2-ti2v-5b) or disable it entirely
+# (-e MODEL_SETS=) from the Vast template's Docker Options.
+ENV MODEL_SETS=all
+
 # NOTE: this ENV does NOT produce the console's "Open" button. Verified against
 # vast-ai/base-image source: nothing in the container reads OPEN_BUTTON_PORT
 # (current scripts gate on /etc/portal.yaml instead), and the console renders

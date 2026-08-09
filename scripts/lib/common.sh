@@ -569,19 +569,30 @@ print_model_status() {
         \( -name '*.safetensors' -o -name '*.ckpt' -o -name '*.pt' -o -name '*.pth' -o -name '*.gguf' \) \
         2>/dev/null | wc -l)"
 
+    # Is the background download job still working?
+    local running=0
+    supervisorctl status colossul-models 2>/dev/null | grep -q RUNNING && running=1
+
     echo "  MODELS"
-    if [ "${n:-0}" -gt 0 ]; then
+    if [ "$running" = "1" ]; then
+        echo "      DOWNLOADING NOW, in the background: ${MODEL_SETS:-?}"
+        echo "      $n file(s) landed so far in $root"
+        echo "      The seats above work already. A workflow opened before its"
+        echo "      weights arrive will say \"Missing Models\" — reopen it later."
+        echo ""
+        echo "      Follow it:   colossul-seats models-log"
+        echo "      (also in the Instance Portal -> Logs -> models)"
+    elif [ "${n:-0}" -gt 0 ]; then
         echo "      $n weight file(s) in $root"
         echo "      Add more:  colossul-seats models --list"
     else
         echo "      NONE DOWNLOADED — ComfyUI will show \"Missing Models\" on any"
-        echo "      workflow that needs weights. This is a choice, not a fault:"
-        echo "      model sets are opt-in so no one spends 40 GB by accident."
+        echo "      workflow that needs weights."
         echo ""
         echo "      See what is available:   colossul-seats models --list"
         echo "      Download a set now:      colossul-seats models minimax-h3"
         echo "      Or at boot, in the Vast template's Docker Options:"
-        echo "          -e MODEL_SETS=minimax-h3"
+        echo "          -e MODEL_SETS=all"
     fi
     echo ""
 }
@@ -673,5 +684,40 @@ write_seat_unit() {
         echo ""
         echo "[group:seat${i}]"
         echo "programs=seat${i}-comfyui,seat${i}-backend,seat${i}-frontend"
+    } > "$outfile"
+}
+
+# A one-shot unit that downloads model weights alongside the running seats.
+#
+# NOT run inline from provisioning: the full set is hundreds of gigabytes, and
+# downloading it before the seats are registered would leave four artists staring
+# at a dead instance for over an hour while nothing they need is even blocked on
+# it. ComfyUI starts fine without weights and picks them up as they land, so this
+# runs behind the seats instead.
+#
+# autorestart=false — it is a job, not a service. When it exits, it is done.
+# Its log is a portal log so it shows up as its own tab in the Instance Portal.
+write_models_unit() {
+    local outfile="$1" sets="$2"
+    {
+        echo "; Model downloads: $sets"
+        echo "; Runs once, in the background, while the seats serve traffic."
+        echo "; Progress:  colossul-seats models-log     Re-run:  colossul-seats models $sets"
+        echo ""
+        echo "[program:colossul-models]"
+        echo "environment=PROC_NAME=\"%(program_name)s\",MODEL_SETS=\"${sets}\""
+        echo "command=${COLOSSUL_LIB}/install-models.sh"
+        echo "autostart=true"
+        echo "autorestart=false"
+        echo "startsecs=0"
+        echo "exitcodes=0,1"
+        echo "priority=900"
+        echo "stopasgroup=true"
+        echo "killasgroup=true"
+        echo "stopwaitsecs=30"
+        echo "stdout_logfile=/var/log/portal/models.log"
+        echo "stdout_logfile_maxbytes=10MB"
+        echo "stdout_logfile_backups=1"
+        echo "redirect_stderr=true"
     } > "$outfile"
 }

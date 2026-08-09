@@ -8,6 +8,7 @@
 #   colossul-seats restart all     recycle every seat
 #   colossul-seats gpu             nvidia-smi, annotated with seat ownership
 #   colossul-seats nodes           re-install custom nodes (after editing the manifest)
+#   colossul-seats models-log      follow the background model download
 #   colossul-seats models --list   model sets available to download, and sizes
 #   colossul-seats models --check  verify URLs, sizes and disk, downloading nothing
 #   colossul-seats models minimax-h3   download that set into the shared store
@@ -109,6 +110,12 @@ case "${1:-}" in
                ;;
     models)    shift
                exec "${COLOSSUL_LIB:-/opt/colossul}/install-models.sh" "$@"
+               ;;
+    models-log) shift
+               f=/var/log/portal/models.log
+               [ -f "$f" ] || die "no model download has run (MODEL_SETS is empty?)"
+               echo "── $(supervisorctl status colossul-models 2>/dev/null || echo 'job not registered') ──"
+               tail -n 40 -F "$f"
                ;;
     provision) shift; exec /opt/colossul/provision.sh ;;
     rebuild)   shift; FORCE_REPROVISION=1 exec /opt/colossul/provision.sh ;;

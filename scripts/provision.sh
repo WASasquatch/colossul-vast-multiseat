@@ -352,18 +352,10 @@ if [ -f "$ASSETS_ROOT/extra_model_paths.yaml" ]; then
     log "  also loading operator config: $ASSETS_ROOT/extra_model_paths.yaml"
 fi
 
-# Weights, if any were asked for. Strictly opt-in via MODEL_SETS: these sets run
-# to tens of gigabytes, and silently spending twenty minutes of a rented GPU's
-# time downloading them would be a nasty surprise. Seats start either way, so a
-# slow or failed download never blocks the instance coming up.
-if [ -n "${MODEL_SETS:-}" ]; then
-    log "Downloading model sets: $MODEL_SETS"
-    "${COLOSSUL_LIB}/install-models.sh" \
-        || warn "Model download reported problems — see above."
-else
-    log "No MODEL_SETS requested — skipping model downloads."
-    log "  Available sets:  colossul-seats models --list"
-fi
+# Model weights are NOT downloaded here — see section 8, where a supervisor job
+# fetches them behind the running seats. Downloading hundreds of gigabytes
+# inline would hold every artist off the instance for an hour for something
+# ComfyUI does not need in order to start.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. Per-seat data directories
@@ -391,6 +383,18 @@ rm -f /etc/supervisor/conf.d/colossul-seat*.conf
 for ((i = 0; i < SEAT_COUNT; i++)); do
     write_seat_unit "$i" "/etc/supervisor/conf.d/colossul-seat${i}.conf"
 done
+
+# Model downloads run as their own job, started with the seats rather than
+# before them. Weights arrive while artists are already working.
+rm -f /etc/supervisor/conf.d/colossul-models.conf
+if [ -n "${MODEL_SETS:-}" ]; then
+    write_models_unit /etc/supervisor/conf.d/colossul-models.conf "$MODEL_SETS"
+    log "  model downloads queued as a background job: $MODEL_SETS"
+    log "  (seats do not wait for it; follow with: colossul-seats models-log)"
+else
+    log "  MODEL_SETS is empty — no weights will be downloaded."
+    log "  (set it in the template's Docker Options, e.g. -e MODEL_SETS=all)"
+fi
 
 log "Reloading supervisor..."
 # Reachability probe MUST be `supervisorctl pid` (or `version`), never `status`.

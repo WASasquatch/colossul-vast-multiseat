@@ -381,9 +381,19 @@ without transferring a byte, so a dead link or a gated repo surfaces in seconds
 instead of twenty minutes into a 40 GB pull. It exits non-zero if anything is
 wrong, which makes it usable in a script.
 
-**Nothing downloads unless you name a set.** These run to tens of gigabytes on a
-metered rented box, and seats start whether or not the weights are there — a
-slow or failed download never blocks the instance coming up.
+**`MODEL_SETS` defaults to `all`** — the whole studio library, so any workflow
+opens with its weights already present. Narrow it (`-e MODEL_SETS=minimax-h3`)
+or turn it off (`-e MODEL_SETS=`) from the template's Docker Options.
+
+**Downloads run behind the seats, not in front of them.** They're a supervised
+one-shot job started alongside the seats, so artists can work immediately while
+weights land. A workflow opened before its models arrive says "Missing Models" —
+reopening it later picks them up. Follow progress with `colossul-seats
+models-log`, or the **models** tab in the Instance Portal.
+
+> Put `ComfyUI_Assets` on a **persistent volume**. The download is
+> skip-if-complete, so the second and later boots re-download nothing — the
+> difference between an hour of provisioning every time and only once.
 
 Use canonical `huggingface.co/<repo>/resolve/main/...` URLs. Do **not** paste the
 `us.aws.cdn.hf.co` links the website hands you: those carry `Expires=` and
