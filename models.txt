@@ -21,8 +21,11 @@
 #              those carry Expires= and Signature= and stop working within
 #              hours, so a manifest full of them is broken by tomorrow.
 #
-# A [name] header starts a set. NOTHING downloads unless a set is named — these
-# are tens of gigabytes and cost real money on a rented box.
+# A [name] header starts a set, and applies to every entry until the next one.
+# Entries written before any header belong to the set "default".
+#
+# NOTHING downloads unless a set is named — these are tens of gigabytes and cost
+# real money on a rented box. Name "all" to select every set at once.
 #
 # ── COMMANDS ────────────────────────────────────────────────────────────────
 #
@@ -41,7 +44,8 @@
 #           colossul-seats models minimax-h3 minimax-h3-ref2va
 #
 #   colossul-seats models --all
-#       Download every set defined here. Check the total with --list first.
+#       Download every set defined here. `colossul-seats models all` is the
+#       same thing. Check the total with --list first.
 #
 #   colossul-seats models --sizes > /tmp/models.new
 #       Print this file with every omitted byte count filled in from the
@@ -58,6 +62,11 @@
 # ENV MODEL_SETS=... in the Dockerfile. Comma- or space-separated:
 #
 #     MODEL_SETS=minimax-h3,minimax-h3-ref2va
+#     MODEL_SETS=all                      # every set in this file
+#     MODEL_SETS=default                  # only the entries with no [header]
+#
+# Prefer `all` over listing sets by hand: a set added here later is picked up
+# automatically instead of being silently skipped by a stale list.
 #
 # Unset means no downloads. Seats start either way, so a slow or failed
 # download never blocks the instance coming up.

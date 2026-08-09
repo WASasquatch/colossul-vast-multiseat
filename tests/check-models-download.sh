@@ -263,6 +263,43 @@ echo "  --sizes filled in $SMALL_SIZE and kept the set header"
 echo "PASS: size is genuinely optional, with no loss of protection"
 
 echo ""
+echo "=== 8e. 'all' works at provision time, and unheadered entries are usable ==="
+# MODEL_SETS is the ONLY lever available at boot on Vast, so it needs a way to
+# say "everything". Without it you must enumerate every set, and a set added
+# later silently never downloads.
+cat > "$T/allsets.txt" <<EOF
+models/vae/loose.safetensors  $SMALL_SIZE  $BASE/small.bin
+
+[named]
+models/loras/named.safetensors  $SMALL_SIZE  $BASE/small.bin
+EOF
+out="$(MODEL_MANIFEST="$T/allsets.txt" MODEL_SETS="" bash "$SH" --list 2>&1)"
+grep -q 'default' <<< "$out" \
+    || fail "entries before any [header] must land in a typeable set called 'default': $out"
+grep -q '(unset)' <<< "$out" && fail "'(unset)' is not a name anyone can type: $out"
+
+# via MODEL_SETS (the provision-time path)
+rm -f "$COLOSSUL_ASSETS_ROOT/models/vae/loose.safetensors" \
+      "$COLOSSUL_ASSETS_ROOT/models/loras/named.safetensors"
+out="$(MODEL_MANIFEST="$T/allsets.txt" MODEL_SETS=all bash "$SH" 2>&1)"
+[ -f "$COLOSSUL_ASSETS_ROOT/models/vae/loose.safetensors" ] \
+    || fail "MODEL_SETS=all did not fetch the unheadered entry: $out"
+[ -f "$COLOSSUL_ASSETS_ROOT/models/loras/named.safetensors" ] \
+    || fail "MODEL_SETS=all did not fetch the named set: $out"
+echo "  MODEL_SETS=all fetched both the default and named sets"
+
+# 'default' must also be selectable on its own.
+rm -f "$COLOSSUL_ASSETS_ROOT/models/vae/loose.safetensors" \
+      "$COLOSSUL_ASSETS_ROOT/models/loras/named.safetensors"
+out="$(MODEL_MANIFEST="$T/allsets.txt" MODEL_SETS="" bash "$SH" default 2>&1)"
+[ -f "$COLOSSUL_ASSETS_ROOT/models/vae/loose.safetensors" ] \
+    || fail "'default' should be selectable by name: $out"
+[ -f "$COLOSSUL_ASSETS_ROOT/models/loras/named.safetensors" ] \
+    && fail "'default' pulled a named set too — sets must stay separate"
+echo "  'default' selectable on its own, without dragging in named sets"
+echo "PASS: all/default selection works from both the CLI and MODEL_SETS"
+
+echo ""
 echo "=== 9. the token is never sent to a non-HuggingFace host ==="
 # Comments are stripped first — the script deliberately *mentions*
 # --location-trusted to explain why it must not be used.

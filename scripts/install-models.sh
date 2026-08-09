@@ -49,7 +49,11 @@ parse_manifest() {
             else                                { size = $2;  url = $3 }
             if (dest == "" || url == "") next
             if (size == "") size = "-"
-            if (set == "") set = "(unset)"
+            # Entries written before any [header] belong to "default" — a name
+            # that can actually be typed. It still has to be asked for; an
+            # implicit set that downloads itself would break the one guarantee
+            # this script makes.
+            if (set == "") set = "default"
             print set "\t" dest "\t" size "\t" url
         }
     ' "$MANIFEST"
@@ -125,7 +129,10 @@ case "${1:-}" in
         echo "Model sets defined in $(basename "$MANIFEST"):"
         list_sets
         echo ""
-        echo "Download one with:  colossul-seats models <set>"
+        echo "  Download one:   colossul-seats models <set>"
+        echo "  Download all:   colossul-seats models --all"
+        echo "  At boot time:   MODEL_SETS=<set>[,<set>...]   or   MODEL_SETS=all"
+        echo ""
         exit 0
         ;;
     --sizes)
@@ -163,6 +170,18 @@ esac
 # Drop empties that a trailing comma in MODEL_SETS would produce.
 _w=(); for s in ${WANT[@]+"${WANT[@]}"}; do [ -n "$s" ] && _w+=("$s"); done
 WANT=(${_w[@]+"${_w[@]}"})
+
+# "all" means every set, wherever it is named. Without this there is no way to
+# say "download everything" at provision time — MODEL_SETS would have to list
+# every set by hand, and a set added later would silently never download.
+for s in ${WANT[@]+"${WANT[@]}"}; do
+    case "$s" in
+        all|ALL|'*')
+            mapfile -t WANT < <(parse_manifest | cut -f1 | sort -u)
+            log "MODEL_SETS=all — selecting every set: ${WANT[*]}"
+            break ;;
+    esac
+done
 
 if [ "${#WANT[@]}" -eq 0 ]; then
     log "No model sets requested — nothing to download."

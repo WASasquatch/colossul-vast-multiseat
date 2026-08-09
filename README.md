@@ -365,8 +365,14 @@ into named sets:
 colossul-seats models --list          # what's defined, and how big
 colossul-seats models --check         # verify everything, download nothing
 colossul-seats models minimax-h3      # download that set (42.5 GB)
+colossul-seats models --all           # every set defined
 MODEL_SETS=minimax-h3                 # or at provision time, in Docker Options
+MODEL_SETS=all                        # …everything, including sets added later
 ```
+
+A `[name]` header starts a set; entries above the first header belong to
+`default`. `all` selects every set — prefer it over listing sets by hand at
+provision time, since a hand-written list silently skips any set added later.
 
 `--check` exists because on Vast you can't do a cheap trial run first —
 provisioning starts the moment the container does. It resolves every URL,
