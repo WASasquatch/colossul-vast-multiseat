@@ -194,6 +194,39 @@ addresses change each time the server restarts.
 
 ---
 
+## Part 2b — Getting updates
+
+There are two different kinds of update, and they work very differently.
+
+### Storyrendr changes (new features, bug fixes) — no new server needed
+
+The server downloads Storyrendr fresh **every time it boots**. So:
+
+- **STOP then START the instance.** That's it. It picks up the latest code,
+  rebuilds if anything changed, and comes back in a couple of minutes.
+
+If artists are mid-session and you'd rather not interrupt everyone, an admin can
+run this from the Jupyter terminal instead — it only restarts seats if there was
+actually something new:
+
+```bash
+colossul-seats provision
+```
+
+### Server image changes (our launch scripts, ports, CUDA version) — new server
+
+The image is fixed when the instance is **created**. Stopping and starting
+reuses the same one, so an image update never reaches an existing instance.
+
+- **DESTROY the instance and rent again.** You'll get the current image.
+- Save anything you care about first — Destroy is permanent.
+
+> **Which do I have?** If we tell you "we shipped a Storyrendr update", restart.
+> If we tell you "there's a new image", rent a fresh instance. When in doubt,
+> renting fresh always gets you everything.
+
+---
+
 ## Part 3 — When you're done (important!)
 
 **You are charged for every hour the server runs, even overnight while nobody

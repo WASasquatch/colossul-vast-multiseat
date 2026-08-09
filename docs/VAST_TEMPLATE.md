@@ -272,6 +272,26 @@ remain separate.
 
 ---
 
+## Updating an instance
+
+| What changed | How it reaches a running instance |
+|---|---|
+| **Storyrendr source** (the app) | Automatically on every boot. **STOP → START**, or `colossul-seats provision` for no downtime. |
+| **This image** (seat scripts, ports, `OPEN_BUTTON_PORT`, CUDA base) | **Not at all.** Destroy and rent again. |
+
+The image is fixed at instance *creation*. Stop/start reuses the existing
+container, so it never re-pulls — standard Docker semantics, not a Vast quirk.
+
+That split is deliberate: the app is fetched at runtime precisely so day-to-day
+code changes never require an image rebuild, a new template, or a new instance.
+Only changes to the launch machinery itself do.
+
+`colossul-seats provision` is the no-downtime path: it fetches, rebuilds only if
+the commit moved, and restarts seats **only** when a new build actually landed —
+so it's safe to run while artists are working.
+
+---
+
 ## Troubleshooting
 
 **"Instance is running but has no web interface" / no Open button.**
