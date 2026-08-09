@@ -340,6 +340,28 @@ that machine.
 machines, suspect a driver/CUDA mismatch instead: switch to
 `:latest-cuda12.9` and filter for offers with a higher **Max CUDA**.
 
+**Provisioning fails at "Building the frontend" with `Cannot find module '@/lib/...'`.**
+
+The file exists on a developer's machine but was never committed — a
+`.gitignore` rule is hiding it. Git matches a bare directory rule at **any
+depth**, so `lib/` silently excludes `colossul-frontend/src/lib/`, and every
+fresh clone gets a broken build while working copies stay fine.
+
+Diagnose in `storyrender-services`:
+
+```bash
+git check-ignore -v colossul-frontend/src/lib/output-utils.ts
+# .gitignore:13:lib/    colossul-frontend/src/lib/output-utils.ts
+```
+
+Fix: anchor the rule to the repo root (`/lib/`), force-add the missing files,
+push, then re-run `colossul-seats provision` on the instance. Find every victim
+with:
+
+```bash
+git status --porcelain --ignored=matching | grep '^!!' 
+```
+
 **Provisioning failed with a token error.** `GITHUB_TOKEN` is missing, expired,
 or lacks read access to the repo. Fix it in the template and restart, or set it
 in the shell and run `colossul-seats provision`.

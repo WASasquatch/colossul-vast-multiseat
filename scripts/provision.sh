@@ -236,8 +236,29 @@ if [ "$NEED_BUILD" = "1" ]; then
     # identical for every seat — so a single dist/ serves all of them. The
     # per-seat ComfyUI/backend URLs are read by the preview server at runtime.
     log "Building the frontend (shared by all seats)..."
-    ( cd "$FRONTEND_DIR" && VITE_COMFYUI_EMBED=true npm run build ) \
-        || die "Frontend build failed in $FRONTEND_DIR"
+    BUILD_LOG="$COLOSSUL_ROOT/.frontend-build.log"
+    if ! ( cd "$FRONTEND_DIR" && VITE_COMFYUI_EMBED=true npm run build ) 2>&1 | tee "$BUILD_LOG"; then
+        # "Cannot find module '@/...'" on a *fresh clone* almost never means a
+        # genuine code error — it means the file exists on a developer's disk
+        # but was never committed, usually because a broad .gitignore rule
+        # (e.g. a bare `lib/`, which git matches at any depth) swallowed it.
+        # Say so, because "build failed" alone sends people hunting in the
+        # wrong repository.
+        if grep -q "Cannot find module '@/" "$BUILD_LOG" 2>/dev/null; then
+            warn ""
+            warn "The build failed on modules that are MISSING FROM THE REPOSITORY:"
+            grep -o "Cannot find module '@/[^']*'" "$BUILD_LOG" | sort -u | sed 's/^/       /' >&2
+            warn ""
+            warn "These files most likely exist on a developer's machine but were never"
+            warn "committed - a .gitignore rule is hiding them. In storyrender-services:"
+            warn "       git check-ignore -v colossul-frontend/src/lib/output-utils.ts"
+            warn "A bare 'lib/' or 'build/' rule matches directories at ANY depth."
+            warn "Fix: anchor the rule ('/lib/'), 'git add -f' the missing files, push,"
+            warn "then re-run: colossul-seats provision"
+            warn ""
+        fi
+        die "Frontend build failed in $FRONTEND_DIR (full log: $BUILD_LOG)"
+    fi
 
     echo "$SRC_SHA" > "$STAMP_FILE"
 fi
