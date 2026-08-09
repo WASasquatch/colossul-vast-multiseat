@@ -556,6 +556,36 @@ print_early_access() {
     echo ""
 }
 
+# Say plainly whether any weights are on disk.
+#
+# Model sets are opt-in, which is right — nobody should spend 40 GB of a rented
+# GPU's time by accident — but the consequence is that a fresh instance opens a
+# workflow to ComfyUI's "Missing Models" dialog, which reads as a broken image
+# rather than as a choice nobody made yet. So state it in the READY block, where
+# it cannot scroll past.
+print_model_status() {
+    local root="${ASSETS_ROOT}/models" n=0
+    [ -d "$root" ] && n="$(find "$root" -type f \
+        \( -name '*.safetensors' -o -name '*.ckpt' -o -name '*.pt' -o -name '*.pth' -o -name '*.gguf' \) \
+        2>/dev/null | wc -l)"
+
+    echo "  MODELS"
+    if [ "${n:-0}" -gt 0 ]; then
+        echo "      $n weight file(s) in $root"
+        echo "      Add more:  colossul-seats models --list"
+    else
+        echo "      NONE DOWNLOADED — ComfyUI will show \"Missing Models\" on any"
+        echo "      workflow that needs weights. This is a choice, not a fault:"
+        echo "      model sets are opt-in so no one spends 40 GB by accident."
+        echo ""
+        echo "      See what is available:   colossul-seats models --list"
+        echo "      Download a set now:      colossul-seats models minimax-h3"
+        echo "      Or at boot, in the Vast template's Docker Options:"
+        echo "          -e MODEL_SETS=minimax-h3"
+    fi
+    echo ""
+}
+
 print_access_summary() {
     local n="$1" tmap i gpu pw
     tmap="$(tunnel_map)"
@@ -587,6 +617,7 @@ print_access_summary() {
         printf '      seat %-2s %s\n' "$i" "$(external_url "$(comfyui_ext "$i")" "$tmap")"
     done
     echo ""
+    print_model_status
     echo "  NOTES"
     echo "      - The links above are PRE-AUTHENTICATED: anyone holding one is"
     echo "        logged in. Treat them like passwords; send privately."
