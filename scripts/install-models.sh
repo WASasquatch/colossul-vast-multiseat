@@ -2,6 +2,7 @@
 # Download model weights listed in models.txt into the shared asset tree.
 #
 #   install-models.sh --list                  what sets exist, and their size
+#   install-models.sh --check <set...>        verify without downloading a byte
 #   install-models.sh minimax-h3 [set...]     download those sets
 #   install-models.sh --all                   download everything defined
 #
@@ -63,6 +64,7 @@ human() { awk -v b="${1:-0}" 'BEGIN { printf (b >= 1e9 ? "%.1f GB" : "%.0f MB"),
 
 # ── Argument handling ───────────────────────────────────────────────────────
 WANT=()
+CHECK_ONLY=0
 case "${1:-}" in
     --list|-l)
         echo ""
@@ -71,6 +73,12 @@ case "${1:-}" in
         echo ""
         echo "Download one with:  colossul-seats models <set>"
         exit 0
+        ;;
+    --check|--dry-run|-n)
+        shift
+        CHECK_ONLY=1
+        if [ "$#" -gt 0 ]; then WANT=("$@")
+        else mapfile -t WANT < <(parse_manifest | cut -f1 | sort -u); fi
         ;;
     --all) mapfile -t WANT < <(parse_manifest | cut -f1 | sort -u) ;;
     "")    IFS=', ' read -r -a WANT <<< "${MODEL_SETS:-}" ;;
@@ -101,9 +109,110 @@ for s in "${WANT[@]}"; do
     }
 done
 
+# ── Auth ────────────────────────────────────────────────────────────────────
+# Set before anything reaches the network, so --check exercises exactly the
+# credentials a real download would use.
+#
+# The token goes ONLY to huggingface.co. HF answers /resolve/ with a redirect to
+# a pre-signed CDN URL that needs no auth, and curl drops the Authorization
+# header across hosts by default — which is what we want. Do not "fix" this with
+# --location-trusted: that hands your token to every host in the redirect chain.
+# HF_TOKEN arrives the same way GITHUB_TOKEN does: set it as a Vast ACCOUNT-level
+# environment variable and the base image writes it to /etc/environment, which
+# load_vast_environment() sourced above. $WORKSPACE/.env works too.
+AUTH=()
+if [ -n "${HF_TOKEN:-}" ]; then
+    AUTH=(--header "Authorization: Bearer ${HF_TOKEN}")
+    # Say so, but never echo the value — this log is world-readable in the portal.
+    log "Authenticating to huggingface.co with HF_TOKEN (…${HF_TOKEN: -4})"
+else
+    log "No HF_TOKEN set — public repos only. Gated ones will 401/403."
+fi
+
 # ── Selection, and what is actually still missing ───────────────────────────
 SELECTED="$(parse_manifest | awk -F'\t' -v want="$(printf '%s\n' "${WANT[@]}" | paste -sd'|')" '
     $1 ~ "^(" want ")$"')"
+
+# ── --check: prove the whole thing works without spending bandwidth ─────────
+# The point is to answer "will this work?" before committing to 40+ GB on a
+# rented GPU, so it must touch every failure mode a real run would hit: dead
+# URL, gated repo, wrong declared size, not enough disk.
+if [ "$CHECK_ONLY" = "1" ]; then
+    echo ""
+    log "Checking sets: ${WANT[*]}   (no data will be downloaded)"
+    [ -n "${HF_TOKEN:-}" ] && log "  HF_TOKEN is set" || log "  HF_TOKEN is NOT set (fine unless a repo is gated)"
+    echo ""
+    printf '  %-8s %-52s %s\n' "STATUS" "FILE" "NOTE"
+    problems=0; want_bytes=0; present=0
+    while IFS=$'\t' read -r set dest size url; do
+        [ -n "$dest" ] || continue
+        name="$(basename "$dest")"
+        target="$ASSETS_ROOT/$dest"
+
+        if [ -f "$target" ] && [ "$size" != "-" ] \
+           && [ "$(stat -c %s "$target" 2>/dev/null || echo 0)" = "$size" ]; then
+            printf '  %-8s %-52s %s\n' "have" "$name" "already downloaded"
+            present=$((present + 1))
+            continue
+        fi
+
+        # -I can 405 on some CDNs; fall back to a ranged GET that pulls 1 byte.
+        hdr="$(curl -sIL --max-time 45 ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
+        code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
+        if [ -z "$code" ] || [ "$code" -ge 400 ] 2>/dev/null; then
+            hdr="$(curl -sL --max-time 45 -r 0-0 -D - -o /dev/null ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
+            code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
+        fi
+        # True file size: from Content-Range on a 206 (Content-Length there is
+        # only the slice we asked for, so comparing it would be nonsense), else
+        # from Content-Length on a 200.
+        remote="$(grep -i '^content-range:' <<< "$hdr" | tail -1 | tr -d '\r' \
+                  | sed -n 's#.*/\([0-9][0-9]*\).*#\1#p')"
+        [ -n "$remote" ] || [ "$code" != "200" ] || \
+            remote="$(grep -i '^content-length:' <<< "$hdr" | tail -1 | tr -d '\r' | awk '{print $2}')"
+
+        case "${code:-000}" in
+            200|206)
+                if [ "$size" = "-" ]; then
+                    printf '  %-8s %-52s %s\n' "ok" "$name" "size not declared; remote says $(human "${remote:-0}")"
+                elif [ -n "$remote" ] && [ "$remote" != "$size" ]; then
+                    printf '  %-8s %-52s %s\n' "SIZE" "$name" "manifest says $size, server says $remote"
+                    problems=$((problems + 1))
+                else
+                    printf '  %-8s %-52s %s\n' "ok" "$name" "$(human "$size")"
+                fi
+                [ "$size" != "-" ] && want_bytes=$((want_bytes + size))
+                ;;
+            401|403)
+                printf '  %-8s %-52s %s\n' "AUTH" "$name" "gated — needs a valid HF_TOKEN"
+                problems=$((problems + 1)) ;;
+            404)
+                printf '  %-8s %-52s %s\n' "GONE" "$name" "404 — file moved or renamed upstream"
+                problems=$((problems + 1)) ;;
+            *)
+                printf '  %-8s %-52s %s\n' "FAIL" "$name" "HTTP ${code:-no response}"
+                problems=$((problems + 1)) ;;
+        esac
+    done <<< "$SELECTED"
+
+    AVAIL_KB="$(df -Pk "$ASSETS_ROOT" | awk 'NR==2 {print $4}')"
+    AVAIL=$((AVAIL_KB * 1024))
+    echo ""
+    log "Would download $(human "$want_bytes"); $present file(s) already present."
+    log "Free space at $ASSETS_ROOT: $(human "$AVAIL")"
+    if [ "$want_bytes" -gt 0 ] && [ "$AVAIL" -lt $((want_bytes + 5 * 1024 * 1024 * 1024)) ]; then
+        warn "NOT ENOUGH DISK — need $(human "$want_bytes") plus a 5 GB margin."
+        problems=$((problems + 1))
+    fi
+    echo ""
+    if [ "$problems" -eq 0 ]; then
+        log "All checks passed. Download for real with:"
+        log "    colossul-seats models ${WANT[*]}"
+        exit 0
+    fi
+    warn "$problems problem(s) above — fix these before downloading."
+    exit 1
+fi
 
 NEED_BYTES=0
 TODO=""
@@ -145,17 +254,6 @@ if [ "$NEED_BYTES" -gt 0 ] && [ "$AVAIL" -lt $((NEED_BYTES + MARGIN)) ]; then
     warn "but only $(human "$AVAIL") is free at $ASSETS_ROOT."
     warn "Rent an instance with a larger volume, or download fewer sets."
     exit 1
-fi
-
-# ── Auth ────────────────────────────────────────────────────────────────────
-# The token goes ONLY to huggingface.co. HF answers /resolve/ with a redirect to
-# a pre-signed CDN URL that needs no auth, and curl drops the Authorization
-# header across hosts by default — which is what we want. Do not "fix" this with
-# --location-trusted: that hands your token to every host in the redirect chain.
-AUTH=()
-if [ -n "${HF_TOKEN:-}" ]; then
-    AUTH=(--header "Authorization: Bearer ${HF_TOKEN}")
-    log "  Using HF_TOKEN for huggingface.co (gated repos)"
 fi
 
 # ── Download ────────────────────────────────────────────────────────────────

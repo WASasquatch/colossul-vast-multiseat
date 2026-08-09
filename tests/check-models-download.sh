@@ -51,8 +51,11 @@ class H(http.server.BaseHTTPRequestHandler):
 http.server.HTTPServer(("127.0.0.1", PORT), H).serve_forever()
 PY
 
-start_server() {   # start_server <ranges 0|1> -> sets PORT
+start_server() {   # start_server <ranges 0|1> -> sets PORT and BASE
     PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
+    # BASE must be re-derived here: the port changes on every restart, and a
+    # stale BASE silently turns later cases into "connection refused" tests.
+    BASE="http://127.0.0.1:$PORT"
     RANGE="$1" python3 "$T/server.py" "$T/srv" "$PORT" >"$T/srv.log" 2>&1 </dev/null &
     echo $! > "$T/srv.pid"
     local ready=0 _
@@ -69,6 +72,10 @@ start_server 1
 # vacuously against a server that silently sends the whole file every time.
 code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Range: bytes=100-' "http://127.0.0.1:$PORT/small.bin")
 [ "$code" = "206" ] || fail "test server is not honouring Range (got $code) — resume tests would be meaningless"
+# And it must really 404 for a missing path, or the dead-URL case below is
+# testing connection-refused instead.
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/definitely-not-here.bin")
+[ "$code" = "404" ] || fail "test server returned $code for a missing file, expected 404"
 trap 'kill "$(cat "$T/srv.pid" 2>/dev/null)" 2>/dev/null; rm -rf "$T"' EXIT
 BASE="http://127.0.0.1:$PORT"
 
@@ -183,6 +190,41 @@ start_server 1
 sed -i "s#http://127.0.0.1:[0-9]*#http://127.0.0.1:$PORT#" "$T/models.txt"
 
 echo ""
+echo "=== 8c. --check verifies without downloading anything ==="
+# On Vast you cannot do a cheap trial run before provisioning; --check is how
+# you answer "will this work?" without committing to 40+ GB, so it has to
+# actually detect the failures a real run would hit.
+rm -f "$TARGET" "$TARGET.part"
+out="$(run --check alpha)"; rc=$?
+[ "$rc" = "0" ] || fail "--check should pass for a reachable file: $out"
+[ -f "$TARGET" ] && fail "--check DOWNLOADED the file — it must not"
+grep -q 'ok' <<< "$out" || fail "--check should report ok: $out"
+grep -qi 'would download' <<< "$out" || fail "--check should report the total: $out"
+echo "  reachable file reported ok, nothing written to disk"
+
+# A dead URL must be caught here rather than 20 minutes into a real run.
+cat > "$T/broken.txt" <<EOF
+[dead]
+models/vae/gone.safetensors  100  $BASE/no-such-file.bin
+EOF
+out="$(MODEL_MANIFEST="$T/broken.txt" MODEL_SETS="" bash "$SH" --check dead 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "--check must FAIL on a 404 URL: $out"
+grep -qE 'GONE|404' <<< "$out" || fail "--check should identify the 404: $out"
+echo "  dead URL detected and reported as a failure"
+
+# A wrong declared size means the disk precheck lies and every download looks
+# truncated; --check must surface it before that happens.
+cat > "$T/wrongsize.txt" <<EOF
+[bad]
+models/vae/small.safetensors  999999999  $BASE/small.bin
+EOF
+out="$(MODEL_MANIFEST="$T/wrongsize.txt" MODEL_SETS="" bash "$SH" --check bad 2>&1)"; rc=$?
+[ "$rc" -ne 0 ] || fail "--check must FAIL when the declared size is wrong: $out"
+grep -q 'SIZE' <<< "$out" || fail "--check should flag the size mismatch: $out"
+echo "  wrong declared size detected"
+echo "PASS: --check catches dead URLs and bad sizes, downloads nothing"
+
+echo ""
 echo "=== 9. the token is never sent to a non-HuggingFace host ==="
 # Comments are stripped first — the script deliberately *mentions*
 # --location-trusted to explain why it must not be used.
@@ -194,30 +236,52 @@ grep -q 'HF_TOKEN' "$SH" || fail "should support HF_TOKEN for gated repos"
 # Authorization header when a redirect crosses to another host.
 mkdir -p "$T/echo"
 ECHO_PORT=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
-python3 - "$ECHO_PORT" "$T/seen.txt" <<'PY' >/dev/null 2>&1 </dev/null &
+# To a file, not a heredoc: `python3 - ... <<'PY' </dev/null &` redirects stdin
+# away from the heredoc, so python receives an empty program and exits at once —
+# and the test then "fails" for a reason that has nothing to do with the code.
+cat > "$T/echo.py" <<'PY'
 import sys, http.server
 PORT=int(sys.argv[1]); OUT=sys.argv[2]
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def do_GET(self):
         open(OUT,"a").write(f"{self.path} auth={self.headers.get('Authorization')}\n")
-        self.send_response(200); self.send_header("Content-Length","2"); self.end_headers()
+        self.send_response(200); self.send_header("Content-Length","2")
+        self.send_header("Accept-Ranges","bytes"); self.end_headers()
         self.wfile.write(b"ok")
 http.server.HTTPServer(("127.0.0.1",PORT),H).serve_forever()
 PY
+python3 "$T/echo.py" "$ECHO_PORT" "$T/seen.txt" >/dev/null 2>&1 </dev/null &
 echo $! > "$T/echo.pid"
-for _ in $(seq 1 40); do curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$ECHO_PORT/probe" && break; sleep 0.25; done
+eready=0
+for _ in $(seq 1 40); do
+    curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$ECHO_PORT/probe" && { eready=1; break; }
+    sleep 0.25
+done
+[ "$eready" = "1" ] || fail "echo server never came up — the token assertions would pass vacuously"
 : > "$T/seen.txt"
-# 127.0.0.1 and localhost are different hosts to curl, so this is a genuine
-# cross-host redirect.
-curl -s -o /dev/null --max-time 10 -H "Authorization: Bearer SECRET_TOKEN_VALUE" \
-     --location "http://localhost:$ECHO_PORT/start" 2>/dev/null || true
+
+# (a) HF_TOKEN must actually BE SENT to the primary host — otherwise gated
+# repos fail with a 401 that looks like a bad token rather than an unused one.
+cat > "$T/tok.txt" <<EOF
+[tok]
+models/vae/tok.safetensors  2  http://127.0.0.1:$ECHO_PORT/gated.bin
+EOF
+HF_TOKEN=SECRET_TOKEN_VALUE MODEL_MANIFEST="$T/tok.txt" MODEL_SETS="" \
+    bash "$SH" tok >"$T/tokrun.log" 2>&1 || true
+grep -q 'auth=Bearer SECRET_TOKEN_VALUE' "$T/seen.txt" \
+    || fail "HF_TOKEN was NOT sent as an Authorization header: $(cat "$T/seen.txt")"
+echo "  HF_TOKEN is sent as 'Authorization: Bearer ...' to the target host"
+
+# (b) …and it must never be echoed into the log, which is world-readable
+# through the instance portal.
+grep -q 'SECRET_TOKEN_VALUE' "$T/tokrun.log" \
+    && fail "the token value was printed to the log: $(grep -n SECRET_TOKEN_VALUE "$T/tokrun.log")"
+echo "  token value never appears in the log output"
+
 kill "$(cat "$T/echo.pid" 2>/dev/null)" 2>/dev/null
-if grep -q 'SECRET_TOKEN_VALUE' "$T/seen.txt" 2>/dev/null; then
-    grep -c 'SECRET_TOKEN_VALUE' "$T/seen.txt"
-fi
 echo "  no --location-trusted in code; curl drops auth across hosts by default"
-echo "PASS: token handling is safe"
+echo "PASS: token is used where it should be, and never logged"
 
 echo ""
 echo "=== 10. the manifest carries no secrets and no expiring URLs ==="

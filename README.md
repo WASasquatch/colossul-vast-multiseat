@@ -363,9 +363,17 @@ into named sets:
 
 ```bash
 colossul-seats models --list          # what's defined, and how big
+colossul-seats models --check         # verify everything, download nothing
 colossul-seats models minimax-h3      # download that set (42.5 GB)
 MODEL_SETS=minimax-h3                 # or at provision time, in Docker Options
 ```
+
+`--check` exists because on Vast you can't do a cheap trial run first —
+provisioning starts the moment the container does. It resolves every URL,
+compares the server's size against the manifest, and checks free disk, all
+without transferring a byte, so a dead link or a gated repo surfaces in seconds
+instead of twenty minutes into a 40 GB pull. It exits non-zero if anything is
+wrong, which makes it usable in a script.
 
 **Nothing downloads unless you name a set.** These run to tens of gigabytes on a
 metered rented box, and seats start whether or not the weights are there — a
@@ -374,8 +382,15 @@ slow or failed download never blocks the instance coming up.
 Use canonical `huggingface.co/<repo>/resolve/main/...` URLs. Do **not** paste the
 `us.aws.cdn.hf.co` links the website hands you: those carry `Expires=` and
 `Signature=` and stop working within hours, so a manifest of them is broken by
-tomorrow. For gated repos, `export HF_TOKEN=hf_...` — it is read from the
-environment only and never written to the manifest.
+**Gated repos need `HF_TOKEN`.** Set it as a Vast **account-level environment
+variable**, exactly where `GITHUB_TOKEN` goes — the base image writes those to
+`/etc/environment`, which the downloader sources. (`$WORKSPACE/.env` works too,
+and `export HF_TOKEN=...` works for a manual run.) It is read from the
+environment only, never written to the manifest, and never printed to the log —
+only its last four characters, since the provisioning log is readable through
+the instance portal.
+
+`Comfy-Org/MiniMax-H3` is public, so the sets above need no token at all.
 
 Downloads resume, so re-running after an interruption is cheap: anything already
 at its full size is skipped and partials continue where they stopped. The
