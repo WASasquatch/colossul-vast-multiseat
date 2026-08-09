@@ -135,6 +135,45 @@ echo "  requirements.txt found and handed to the installer"
 echo "PASS: install_reqs resolves the pack path correctly"
 
 echo ""
+echo "=== 6c. pinned entries can clone a COMMIT SHA, not just a branch ==="
+# `git clone --branch <sha>` fails: --branch takes branch and tag names only.
+# The manifest pins commit SHAs, so a --branch-based clone would fail every
+# pinned pack. Proven against a real local repo, no network needed.
+git init -q "$T/origin"
+( cd "$T/origin" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m one \
+  && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m two ) >/dev/null 2>&1
+PINSHA="$(git -C "$T/origin" rev-parse HEAD)"
+
+grep -q 'clone --depth 1 --branch' "$ROOT/scripts/install-custom-nodes.sh" \
+    && fail "installer clones pins with 'clone --branch', which cannot take a commit SHA"
+
+# Exercise the installer's actual pinned-clone form.
+if ( git init -q "$T/dest" &&
+     git -C "$T/dest" remote add origin "$T/origin" &&
+     git -C "$T/dest" fetch --depth 1 -q origin "$PINSHA" &&
+     git -C "$T/dest" checkout -q FETCH_HEAD ) >/dev/null 2>&1; then
+    got="$(git -C "$T/dest" rev-parse HEAD)"
+    [ "$got" = "$PINSHA" ] || fail "pinned clone landed on $got, expected $PINSHA"
+    echo "  commit-SHA pin checked out exactly"
+else
+    fail "the installer's pinned-clone form cannot fetch a commit SHA"
+fi
+
+# Every manifest ref, if present, should be a full SHA or a version tag — a
+# bare branch name in a "frozen" manifest is drift waiting to happen.
+unpinned=0
+for e in "${ENTRIES[@]}"; do
+    case "$e" in
+        *@*) r="${e##*@}"
+             [[ "$r" =~ ^[0-9a-f]{40}$ || "$r" =~ ^v?[0-9] ]] \
+                 || echo "  NOTE: '$r' is a branch, not a pin ($e)" ;;
+        *)   unpinned=$((unpinned + 1)) ;;
+    esac
+done
+echo "  $unpinned of ${#ENTRIES[@]} entries unpinned"
+echo "PASS: commit pins are clonable"
+
+echo ""
 echo "=== 7. Manager: flag passed AND the self-disabling checkout retired ==="
 grep -q -- '--enable-manager' "$ROOT/scripts/seat-comfyui.sh" \
     || fail "seat-comfyui.sh must pass --enable-manager"

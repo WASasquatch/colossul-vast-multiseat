@@ -1,8 +1,14 @@
 # Custom node packs installed into the shared ComfyUI on every instance.
 #
 # Format, one per line:      <git-url>[@ref]
-#   ref is optional; omit to track the default branch. Pin a tag or commit for
-#   production so an upstream break can't reach your artists mid-shoot.
+#   ref may be a commit SHA, tag or branch. Omit it to track the default branch.
+#
+# EVERY PACK BELOW IS FROZEN to the commit it was at on 2026-08-09, so a rented
+# instance months from now installs exactly what was tested — node packs update
+# constantly and unpinned ones would drift under the artists. To move to current
+# upstream, re-resolve deliberately and re-test:
+#
+#   while read -r u; do echo "$u@$(git ls-remote "$u" HEAD | cut -f1)"; done
 #
 # Blank lines and #comments ignored. Order is irrelevant: clones run in
 # parallel, then each pack's requirements.txt is installed SEQUENTIALLY into the
@@ -19,29 +25,29 @@
 # the registry has collisions between forks.
 
 # --- video / animation core ------------------------------------------------
-https://github.com/kijai/ComfyUI-WanVideoWrapper          # WanVideo*, MultiTalk*, Wav2Vec (19 nodes)
-https://github.com/kijai/ComfyUI-KJNodes                  # ImageResizeKJv2, ColorMatch, GetImageSizeAndCount, INTConstant, SkipLayerGuidanceWanVideo
-https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite   # VHS_LoadVideo, VHS_VideoCombine, VHS_VideoInfo
-https://github.com/Fannovel16/ComfyUI-Frame-Interpolation # RIFE VFI, FILM VFI
-https://github.com/kijai/ComfyUI-MelBandRoFormer          # MelBandRoFormerModelLoader/Sampler
-https://github.com/wallen0322/ComfyUI-Wan22FMLF           # WanFirstMiddleLastFrameToVideo
+https://github.com/kijai/ComfyUI-WanVideoWrapper@088128b224242e110d3906c6750e9a3a348a659b  # WanVideo*, MultiTalk*, Wav2Vec (19 nodes)
+https://github.com/kijai/ComfyUI-KJNodes@60cd6bc1870db94c6eeb05fbe455147a8e91c4e9  # ImageResizeKJv2, ColorMatch, GetImageSizeAndCount, INTConstant, SkipLayerGuidanceWanVideo
+https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite@4ee72c065db22c9d96c2427954dc69e7b908444b  # VHS_LoadVideo, VHS_VideoCombine, VHS_VideoInfo
+https://github.com/Fannovel16/ComfyUI-Frame-Interpolation@26545cc2dd95bc3d27f056016300673bdeee78f5  # RIFE VFI, FILM VFI
+https://github.com/kijai/ComfyUI-MelBandRoFormer@92c86854e6654f4aacc97484471af95c98ea16d4  # MelBandRoFormerModelLoader/Sampler
+https://github.com/wallen0322/ComfyUI-Wan22FMLF@7140cd224396aff9fd909ab0041c3fbf81b92b0c  # WanFirstMiddleLastFrameToVideo
 
 # --- preprocessing / masking ----------------------------------------------
-https://github.com/Fannovel16/comfyui_controlnet_aux      # AIO_Preprocessor, DWPreprocessor, DepthAnythingV2Preprocessor, BinaryPreprocessor
-https://github.com/yuvraj108c/ComfyUI-Video-Depth-Anything # LoadVideoDepthAnythingModel, VideoDepthAnything*
-https://github.com/lldacing/ComfyUI_BiRefNet_ll           # RembgByBiRefNet, AutoDownloadBiRefNetModel
+https://github.com/Fannovel16/comfyui_controlnet_aux@e8b689a513c3e6b63edc44066560ca5919c0576e  # AIO_Preprocessor, DWPreprocessor, DepthAnythingV2Preprocessor, BinaryPreprocessor
+https://github.com/yuvraj108c/ComfyUI-Video-Depth-Anything@a0db08e63d1ea571601c45cde4aaee0acdd0544d  # LoadVideoDepthAnythingModel, VideoDepthAnything*
+https://github.com/lldacing/ComfyUI_BiRefNet_ll@5443a2aa16cfbd98bb2f7dcc8bdcb70439e08529  # RembgByBiRefNet, AutoDownloadBiRefNetModel
 
 # --- utility ---------------------------------------------------------------
-https://github.com/yolain/ComfyUI-Easy-Use                # easy forLoopStart/End, cleanGpuUsed, imageSwitch
-https://github.com/WASasquatch/was-node-suite-comfyui     # Image Blank, Image Resize, Image Filter Adjustments, Text Multiline
-https://github.com/WASasquatch/WAS_Extras                 # WASTiledImageUpscaleWithModel
-https://github.com/cubiq/ComfyUI_essentials               # ImageResize+
-https://github.com/pythongosssss/ComfyUI-Custom-Scripts   # MathExpression|pysssss
-https://github.com/jamesWalker55/comfyui-various          # JWImageSaturation, JWFloatToInteger, JWIntegerAdd
-https://github.com/chflame163/ComfyUI_LayerStyle          # LayerUtility: PurgeVRAM
-https://github.com/ssitu/ComfyUI_UltimateSDUpscale        # UltimateSDUpscaleNoUpscale
-https://github.com/ltdrdata/ComfyUI-Impact-Pack           # ImageListToImageBatch
-https://github.com/PGCRT/CRT-Nodes                        # CRTFirstLastFrameSelector
+https://github.com/yolain/ComfyUI-Easy-Use@595e0738a9e3f8d0d9c4d875461b2d2c9e7559c7  # easy forLoopStart/End, cleanGpuUsed, imageSwitch
+https://github.com/WASasquatch/was-node-suite-comfyui@ea935d1044ae5a26efa54ebeb18fe9020af49a45  # Image Blank, Image Resize, Image Filter Adjustments, Text Multiline
+https://github.com/WASasquatch/WAS_Extras@66667a380067b74cadb555e7e01f6b3827dc143e  # WASTiledImageUpscaleWithModel
+https://github.com/cubiq/ComfyUI_essentials@9d9f4bedfc9f0321c19faf71855e228c93bd0dc9  # ImageResize+
+https://github.com/pythongosssss/ComfyUI-Custom-Scripts@609f3afaa74b2f88ef9ce8d939626065e3247469  # MathExpression|pysssss
+https://github.com/jamesWalker55/comfyui-various@5bd85aaf7616878471469c4ec7e11bbd0cef3bf2  # JWImageSaturation, JWFloatToInteger, JWIntegerAdd
+https://github.com/chflame163/ComfyUI_LayerStyle@64f976fec8492ea4930c0e30c32369573189b23d  # LayerUtility: PurgeVRAM
+https://github.com/ssitu/ComfyUI_UltimateSDUpscale@a5547db9e1d07d3318bb21e9e9c474f4c1e9c8df  # UltimateSDUpscaleNoUpscale
+https://github.com/ltdrdata/ComfyUI-Impact-Pack@429d0159ad429e64d2b3916e6e7be9c22d025c3c  # ImageListToImageBatch
+https://github.com/PGCRT/CRT-Nodes@381100074c165cd44d3fb3137a9035ced61f9a1b  # CRTFirstLastFrameSelector
 
 # ── Unverified — enable after confirming which pack really owns these ───────
 # Several node names are claimed by multiple repos in the registry. These were

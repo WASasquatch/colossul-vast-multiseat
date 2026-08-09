@@ -289,8 +289,16 @@ Standard `supervisorctl` also works: seats are grouped as `seat0`…`seat3`, so
 ### Custom nodes
 
 Declared in [`custom-nodes.txt`](custom-nodes.txt), one git URL per line with an
-optional `@ref` to pin. Provisioning clones them into the shared
-`ComfyUI/custom_nodes/` and installs each pack's `requirements.txt`.
+optional `@ref` (commit SHA, tag or branch). Provisioning clones them into the
+shared `ComfyUI/custom_nodes/` and installs each pack's `requirements.txt`.
+
+**All 19 packs are frozen to specific commits.** Node repos update constantly,
+so an unpinned manifest means an instance rented next month installs something
+nobody tested. Re-freeze deliberately when you want to move forward:
+
+```bash
+git ls-remote <repo> HEAD      # then paste the SHA after @ and re-test
+```
 
 ```bash
 colossul-seats nodes          # after editing the manifest
@@ -321,12 +329,16 @@ Three things worth knowing, all of which bite silently:
 
 ### ComfyUI version
 
-`COMFYUI_REF` (default `master`) selects what ComfyUI provisioning runs — the
-base image pins an older release than newer model families (Minimax H3, LTX,
-Wan Animate 2) need. **Pin a tag for production** so an upstream break can't
-reach artists mid-shoot; set it empty to keep the image's version. ComfyUI's own
-requirements are re-synced after any change, since an upgrade moves the pinned
-frontend package.
+`COMFYUI_REF` selects what ComfyUI provisioning runs. The base image ships
+v0.30.0, which predates the model families we need.
+
+**Frozen to `v0.31.1`** — a release tag, not `master`, so an upstream break
+can't land on artists mid-shoot. That tag was verified to carry Minimax/H3, LTX
+and Wan Animate support under `comfy/` and `comfy_extras/`. Bump it deliberately
+after testing; set it empty to keep whatever the base image shipped.
+
+ComfyUI's own requirements are re-synced after any change, since an upgrade
+moves the pinned `comfyui-frontend-package`.
 
 ### ComfyUI-Manager
 

@@ -50,11 +50,14 @@ ENV NUM_SEATS=4 \
     STORYRENDR_REPO=https://github.com/WASasquatch/storyrendr-services.git \
     STORYRENDR_REF=main
 
-# ComfyUI version to run. The base image pins an older release than newer model
-# families need (Minimax H3, LTX, Wan Animate 2), so provisioning updates the
-# checkout to this ref at boot. Pin a tag here for production; set empty to keep
-# whatever the base image shipped.
-ENV COMFYUI_REF=master
+# ComfyUI version to run. The base image ships v0.30.0, which predates the model
+# families we need, so provisioning moves the checkout to this ref at boot.
+#
+# FROZEN to a release tag, not a branch: on `master` an upstream break lands on
+# artists mid-shoot with no action from us. v0.31.1 was verified to carry
+# Minimax/H3, LTX and Wan Animate support under comfy/ and comfy_extras/.
+# Bump deliberately after testing. Set empty to keep the base image's version.
+ENV COMFYUI_REF=v0.31.1
 
 # ComfyUI-Manager on by default, via --enable-manager on every seat. Set 0 to
 # keep artists out of node installation.

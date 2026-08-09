@@ -115,8 +115,17 @@ else
                 :   # present but not a git checkout — leave it alone
             else
                 if [ -n "$ref" ]; then
-                    git clone --depth 1 --branch "$ref" "$url" "$dest" >/dev/null 2>&1 ||
+                    # init+fetch rather than `clone --branch`: --branch takes
+                    # branch and tag names ONLY and fails on a commit SHA, which
+                    # is exactly what a frozen manifest pins to. This form takes
+                    # a SHA, tag or branch identically, and still shallow-fetches.
+                    ( git init -q "$dest" &&
+                      git -C "$dest" remote add origin "$url" &&
+                      git -C "$dest" fetch --depth 1 -q origin "$ref" &&
+                      git -C "$dest" checkout -q FETCH_HEAD ) >/dev/null 2>&1 || {
+                        rm -rf "$dest"   # don't leave a half-init'd dir behind
                         echo "CLONE_FAILED $name"
+                    }
                 else
                     git clone --depth 1 "$url" "$dest" >/dev/null 2>&1 ||
                         echo "CLONE_FAILED $name"
