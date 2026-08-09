@@ -442,6 +442,16 @@ to storyrender-services would let this patch be deleted.
 the instance's single Vast token. Employees are handed distinct URLs but can
 reach each other's seats. Their *data* is separate; their *access* is not.
 
+**Jupyter is a root shell, behind that same credential.** The base image runs
+JupyterLab on 8080 with `--IdentityProvider.token='' --ServerApp.password=''`
+and `root_dir=/`, plus a `bash` terminal. It binds loopback and relies on
+Caddy's auth — which is the one instance-wide credential every seat already
+uses. So anyone with a seat URL can, if they look, read any other seat's work or
+read `GITHUB_TOKEN` from the environment. That is also *how you administer the
+box*: `Docker ENTRYPOINT` mode means Vast injects no SSH, so Jupyter's terminal
+is the way in. Dropping 8080 from the template locks everyone out including you.
+Keep the token short-expiry, read-only and single-repo accordingly.
+
 **ComfyUI Manager is shared.** Installing custom nodes from one seat's UI
 writes to the shared `custom_nodes/` and affects everyone, and concurrent
 installs from two seats can conflict. Prefer `colossul-seats provision`.

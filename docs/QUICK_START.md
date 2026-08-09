@@ -210,6 +210,20 @@ Your finished renders appear in the gallery inside Storyrendr. **Download
 anything you want to keep** — if the server is destroyed, files left on it are
 gone.
 
+### Getting files on and off the server
+
+Most of the time Storyrendr's own upload and gallery download is all you need.
+
+For anything else — bulk uploads, dragging files around, poking at folders —
+there's a **file manager** at the **Jupyter** link on the Instance Portal
+(port `8080`). It gives you a file browser, a text editor, drag-and-drop upload,
+and download.
+
+> **Ask your producer before using it.** Jupyter can see the *whole* server,
+> including other artists' work and system settings, and it includes a terminal
+> that can change anything. It's there for admin tasks, not day-to-day work.
+> Nothing you need for normal rendering requires it.
+
 ---
 
 ## If something looks wrong

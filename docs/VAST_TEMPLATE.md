@@ -41,8 +41,20 @@ script." That would stop `/opt/instance-tools/bin/entrypoint.sh` from running,
 so supervisord never starts, so no seat ever starts — the instance boots and
 sits there doing nothing.
 
-You lose nothing by choosing `Docker ENTRYPOINT`: the base image starts SSH and
-Jupyter itself through its own supervisor units, so you still get both.
+**What you keep, and what you give up:**
+
+| | Available? | How |
+|---|---|---|
+| **JupyterLab** — file browser, editor, terminal | ✅ Yes | The image runs its own Jupyter on internal `18080`, proxied to external **8080**. Vast's docs explicitly support this: *"To run a proxied Jupyter application, you should run the instance in SSH or Entrypoint mode with Jupyter's configuration retained in the PORTAL_CONFIG variable."* |
+| Instance Portal, tunnels, Caddy auth | ✅ Yes | The image's own supervisor units |
+| **Vast's injected SSH / `scp`** | ❌ No | Entrypoint mode injects nothing: *"As ssh/jupyter access is not provided, your docker image is responsible for setting up any such connections as needed."* |
+
+So you do **not** lose file management. Jupyter gives a file browser, an editor,
+upload/download, and a **terminal that is a full root `bash` shell** — which is
+also where you run `colossul-seats`. What you give up is Vast's own SSH/`scp`.
+
+Keeping port **8080** in the port list is therefore not optional if you want any
+way into the box. See [Who can reach Jupyter](#who-can-reach-jupyter).
 
 ---
 
@@ -58,6 +70,36 @@ Jupyter itself through its own supervisor units, so you still get both.
 | 8080 | Jupyter |
 | 8190 / 8200 / 8210 / 8220 | **Storyrendr, seats 0–3 — what employees open** |
 | 8191 / 8201 / 8211 / 8221 | ComfyUI direct, seats 0–3 |
+
+### Who can reach Jupyter
+
+Worth a deliberate decision rather than a default. The base image starts Jupyter
+with **no authentication of its own**:
+
+```
+--IdentityProvider.token=''  --ServerApp.password=''  --ServerApp.root_dir=/
+--ServerApp.terminado_settings="{'shell_command': ['/bin/bash']}"
+```
+
+It binds `127.0.0.1` and relies entirely on Caddy's basic auth on port 8080. But
+**every seat shares the one instance credential**, so in practice anyone you
+give a seat URL to also holds the credential for Jupyter — and Jupyter is a
+**root shell rooted at `/`**. That means any artist could, if they went looking:
+
+- read or delete another artist's projects and renders,
+- read `GITHUB_TOKEN` out of the environment.
+
+Three options:
+
+| Option | Effect |
+|---|---|
+| **Keep 8080 exposed** (default) | Everyone can reach Jupyter. Fine for a trusted in-house team; assume the token is readable by anyone with a seat. |
+| **Drop 8080 from the port list** | Nobody can reach Jupyter — **including you**. No terminal, no file manager, no `colossul-seats`. Only choose this if you never need to touch the box. |
+| **Set a separate `WEB_PASSWORD`** and hand seat URLs out as portal links only | Slightly raises the bar, but the token is still in the link. Not real isolation. |
+
+Given the brief — a trusted internal team — the default is reasonable. Just
+treat `GITHUB_TOKEN` as visible to everyone with a seat, and prefer a
+short-expiry, read-only, single-repo token accordingly.
 
 Each seat owns a block of ten ports from 8190. That range deliberately avoids
 everything the base image binds — notably its ComfyUI API wrapper on **18288**,
