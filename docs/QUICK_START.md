@@ -316,9 +316,21 @@ Default Tunnel started for Instance Portal (http://localhost:1111)
 * Your web credentials are: vastai / 6618bbe7...
 ```
 
-That first link **is** the portal — open it and log in with those credentials,
-and you'll get the same page the Open button would have shown, with every seat
-listed.
+That first link **is** the portal — open it and log in with those credentials
+(username `vastai`), and you'll get the same page the Open button would have
+shown, with every seat listed.
+
+**A login box is normal**, not an error — it's the instance's security. If the
+long password is awkward to paste, put it in the address instead and the prompt
+is skipped:
+
+```
+https://<your-tunnel>.trycloudflare.com/?token=<the long credential>
+```
+
+That's exactly what the Open button does behind the scenes. Setting
+`WEB_PASSWORD` on the template (Step 3) replaces this long random string with a
+password you choose.
 
 To rescue the one you have:
 1. Click the **⇄** (IP & Port Info) button on the instance card.
