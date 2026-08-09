@@ -78,6 +78,17 @@
 # for a manual run. It is read from the environment only, is never written to
 # this file, and is never printed to the log.
 #
+# ── WATCHING IT RUN ─────────────────────────────────────────────────────────
+#
+# Downloads report into the instance log every 30 seconds, per file:
+#
+#     [3/14] wan2.2_i2v_high_noise_14B_fp16.safetensors: 8.1 GB / 28.6 GB (28%)
+#            at 79 MB/s, eta 4m18s
+#
+# so a big pull never looks like a hung provisioner. MODEL_PROGRESS_INTERVAL
+# changes the cadence in seconds. On a terminal you get curl's own progress bar
+# instead.
+#
 # ── RE-RUNNING ──────────────────────────────────────────────────────────────
 #
 # Always safe and cheap. Files already at their full size are skipped, and an

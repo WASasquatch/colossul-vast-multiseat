@@ -95,6 +95,17 @@ list_sets() {
 }
 
 human() { awk -v b="${1:-0}" 'BEGIN { printf (b >= 1e9 ? "%.1f GB" : "%.0f MB"), (b >= 1e9 ? b/1e9 : b/1e6) }'; }
+fmt_secs() {
+    local s="${1:-0}"
+    if   [ "$s" -ge 3600 ]; then printf '%dh%02dm' $((s / 3600)) $(((s % 3600) / 60))
+    elif [ "$s" -ge 60 ];   then printf '%dm%02ds' $((s / 60)) $((s % 60))
+    else                         printf '%ds' "$s"; fi
+}
+
+# How often to report on a running download, in seconds. A 21 GB file takes
+# minutes; without this the log looks hung.
+PROGRESS_INTERVAL="${MODEL_PROGRESS_INTERVAL:-30}"
+FILE_NO=0
 
 # ── Auth ────────────────────────────────────────────────────────────────────
 # Established before ANY command that touches the network, so --check and
@@ -394,8 +405,14 @@ download_one() {
 
     local pretty="$size"
     [ "$size" = "-" ] && pretty="unknown size" || pretty="$(human "$size")"
-    log "  fetching $name ($pretty)"
+    FILE_NO=$((FILE_NO + 1))
+    log "  [$FILE_NO/$TODO_COUNT] fetching $name ($pretty)"
 
+    # curl's own progress bar is \r-driven and only usable on a terminal. In the
+    # Vast log — which is where an operator actually watches provisioning — it
+    # would be either an unreadable smear or, with --silent, five minutes of
+    # total silence per file. Silence there is indistinguishable from a hang,
+    # so on a non-TTY we poll the partial file and print a line instead.
     local progress=(--silent --show-error)
     [ -t 2 ] && progress=(--progress-bar)
 
@@ -405,7 +422,48 @@ download_one() {
              "${progress[@]}" --output "$part" "$url"
     }
 
-    _curl --continue-at -
+    # Run curl in the background and report on it, unless we're on a terminal
+    # where curl's own bar is better.
+    _curl_watched() {
+        if [ -t 2 ]; then
+            _curl "$@"
+            return $?
+        fi
+        _curl "$@" &
+        local pid=$! start last_t last_b now b elapsed rate eta pct waited
+        start="$(date +%s)"; last_t="$start"; last_b=0
+        while kill -0 "$pid" 2>/dev/null; do
+            waited=0
+            while [ "$waited" -lt "$PROGRESS_INTERVAL" ] && kill -0 "$pid" 2>/dev/null; do
+                sleep 1; waited=$((waited + 1))
+            done
+            kill -0 "$pid" 2>/dev/null || break
+            now="$(date +%s)"
+            b="$(stat -c %s "$part" 2>/dev/null || echo 0)"
+            rate=$(( (b - last_b) / ((now - last_t) > 0 ? (now - last_t) : 1) ))
+            if [ "$size" != "-" ] && [ "$size" -gt 0 ]; then
+                pct=$(( b * 100 / size ))
+                if [ "$rate" -gt 0 ]; then
+                    eta="$(fmt_secs $(( (size - b) / rate )))"
+                else
+                    eta="stalled"
+                fi
+                log "    [$FILE_NO/$TODO_COUNT] $name: $(human "$b") / $(human "$size") (${pct}%) at $(( rate / 1000000 )) MB/s, eta $eta"
+            else
+                log "    [$FILE_NO/$TODO_COUNT] $name: $(human "$b") at $(( rate / 1000000 )) MB/s"
+            fi
+            last_t="$now"; last_b="$b"
+        done
+        wait "$pid"
+        local wrc=$?
+        elapsed=$(( $(date +%s) - start ))
+        b="$(stat -c %s "$part" 2>/dev/null || echo 0)"
+        [ "$wrc" = "0" ] && [ "$elapsed" -gt 0 ] && \
+            log "    $name complete in $(fmt_secs "$elapsed") (avg $(( b / elapsed / 1000000 )) MB/s)"
+        return "$wrc"
+    }
+
+    _curl_watched --continue-at -
     local rc=$?
     # 33 = "server doesn't support byte ranges". Without this fallback a partial
     # from such a host can NEVER complete: every re-run attempts a resume, gets
@@ -414,7 +472,7 @@ download_one() {
     if [ "$rc" = "33" ]; then
         warn "  $name: server won't resume; restarting the download from zero"
         rm -f "$part"
-        _curl
+        _curl_watched
         rc=$?
     fi
     if [ "$rc" != "0" ]; then

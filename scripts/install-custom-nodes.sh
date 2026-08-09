@@ -99,6 +99,12 @@ else
     log "Manifest: ${#ENTRIES[@]} pack(s) from $(basename "$MANIFEST")"
 
     # Clone/update in PARALLEL (network-bound, independent).
+    #
+    # Announce the start and end of this: the clones produce no output of their
+    # own, so without these two lines the provisioning log sits silent for
+    # minutes on a slow link and looks wedged.
+    log "  cloning/updating ${#ENTRIES[@]} pack(s) in parallel..."
+    _clone_start="$(date +%s)"
     pids=()
     for entry in "${ENTRIES[@]}"; do
         url="${entry%@*}"; ref=""
@@ -135,6 +141,12 @@ else
         pids+=($!)
     done
     for p in "${pids[@]}"; do wait "$p" || true; done
+    _present=0
+    for entry in "${ENTRIES[@]}"; do
+        u="${entry%@*}"; [ -d "$CUSTOM_NODES/$(basename "${u%.git}")" ] && _present=$((_present + 1))
+    done
+    log "  clones finished in $(( $(date +%s) - _clone_start ))s ($_present/${#ENTRIES[@]} present)"
+    log "  installing requirements one pack at a time (concurrent pip corrupts a shared venv)..."
 
     # Install requirements SEQUENTIALLY — concurrent pip into one venv corrupts it.
     for entry in "${ENTRIES[@]}"; do

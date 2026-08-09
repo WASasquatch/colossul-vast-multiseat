@@ -336,6 +336,66 @@ echo "  conflicting destinations reported instead of silently picking one"
 echo "PASS: shared files deduped, real conflicts surfaced"
 
 echo ""
+echo "=== 8g. a long download reports progress into a NON-TTY log ==="
+# This is the Vast log case. curl's own bar needs a terminal, and --silent means
+# a 21 GB file produces five minutes of nothing — which reads exactly like a
+# hung provisioner, the failure mode that wastes an operator's afternoon.
+mkdir -p "$T/slow"
+head -c 3000000 /dev/urandom > "$T/slow/big.bin"
+BIGSZ=$(stat -c %s "$T/slow/big.bin")
+SPORT=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')
+cat > "$T/slow.py" <<'PY'
+import os, sys, time, http.server
+ROOT=sys.argv[1]; PORT=int(sys.argv[2])
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self,*a): pass
+    def do_GET(self):
+        p=os.path.join(ROOT, os.path.basename(self.path))
+        if not os.path.isfile(p): self.send_error(404); return
+        sz=os.path.getsize(p)
+        self.send_response(200); self.send_header("Content-Length",str(sz))
+        self.send_header("Accept-Ranges","bytes"); self.end_headers()
+        with open(p,'rb') as f:
+            while True:
+                c=f.read(250000)
+                if not c: break
+                try: self.wfile.write(c)
+                except Exception: return
+                time.sleep(0.5)
+http.server.HTTPServer(("127.0.0.1",PORT),H).serve_forever()
+PY
+python3 "$T/slow.py" "$T/slow" "$SPORT" >/dev/null 2>&1 </dev/null &
+echo $! > "$T/slow.pid"
+# Probe a path that 404s instantly. Fetching big.bin would take ~6s through the
+# deliberately-slow handler and time out on every attempt.
+sready=0
+for _ in $(seq 1 40); do
+    curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$SPORT/absent.bin" && { sready=1; break; }
+    sleep 0.25
+done
+[ "$sready" = "1" ] || fail "slow server never came up"
+
+cat > "$T/slow.txt" <<EOF
+[slow]
+models/vae/slow.safetensors  $BIGSZ  http://127.0.0.1:$SPORT/big.bin
+EOF
+# stdout redirected to a file => not a tty, exactly like supervisor's log.
+MODEL_MANIFEST="$T/slow.txt" MODEL_SETS="" MODEL_PROGRESS_INTERVAL=1 \
+    bash "$SH" slow > "$T/slow.log" 2>&1
+kill "$(cat "$T/slow.pid" 2>/dev/null)" 2>/dev/null
+
+grep -qE 'slow\.safetensors: .*%\)' "$T/slow.log" \
+    || fail "no progress lines in a non-TTY log — it would look hung: $(cat "$T/slow.log")"
+grep -q 'complete in' "$T/slow.log" || fail "should report elapsed time on completion"
+grep -qE '\[1/1\]' "$T/slow.log" || fail "should show which file of how many"
+ticks=$(grep -cE 'slow\.safetensors: .*%\)' "$T/slow.log")
+echo "  $ticks progress line(s), a file counter, and a completion time"
+# And no \r smear from curl's bar leaking into the file.
+grep -q $'\r' "$T/slow.log" && fail "carriage returns leaked into the log — curl's bar is not log-safe"
+echo "  no carriage-return smear in the log"
+echo "PASS: downloads are visible in the Vast log"
+
+echo ""
 echo "=== 9. the token is never sent to a non-HuggingFace host ==="
 # Comments are stripped first — the script deliberately *mentions*
 # --location-trusted to explain why it must not be used.
