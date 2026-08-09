@@ -24,8 +24,23 @@ You need:
 
 - A credit card (Vast.ai bills by the hour).
 - **The access key** — a long line of text starting with `github_pat_...`.
-  Your admin gives you this. It lets the server download our software. Treat it
-  like a password: don't paste it into chat, email, or anywhere public.
+
+### Getting the access key
+
+**Request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul).**
+It's the only thing that lets the server download our Storyrendr software, and
+it isn't something you can generate yourself — it has to be issued from the
+Colossul GitHub account that owns the private repository.
+
+When you ask, mention that it's for a Vast.ai render server, so the right kind
+of key is issued (read-only, limited to the one repository).
+
+Treat the key like a password:
+
+- Don't paste it into group chat, email threads, or a shared doc.
+- Don't put it in a Vast **template** — Step 2 shows where it goes instead.
+- If you think it has leaked, tell WASasquatch so it can be revoked and
+  reissued. Keys also **expire**, so expect to request a fresh one periodically.
 
 ---
 
@@ -51,7 +66,8 @@ This keeps the key encrypted on Vast and out of the template.
    ```
    GITHUB_TOKEN
    ```
-4. In the **value** box paste the long `github_pat_...` key your admin gave you.
+4. In the **value** box paste the long `github_pat_...` key you got from
+   [@WASasquatch](https://github.com/WASasquatch) (Colossul).
 5. Click the **+** button to save it.
 
 > Do this **here**, not in the template. Values stored on your account are
@@ -208,8 +224,9 @@ saved on your account, spelled exactly `GITHUB_TOKEN`. Then **STOP** and
 **START** the instance.
 
 **The log mentions a token or authentication error.**
-The key has probably expired. Ask your admin for a fresh one and update it in
-your account settings.
+The key has probably expired — they're issued with an expiry date. Request a
+fresh one from [@WASasquatch](https://github.com/WASasquatch) (Colossul), update
+it in your account settings (Step 2), then **STOP** and **START** the instance.
 
 **Nothing happens at all — no `[colossul]` lines ever appear.**
 The **Launch Mode** is wrong. It must be `Docker ENTRYPOINT`. Fix the template,
@@ -236,16 +253,18 @@ admin — it's one command (`colossul-seats restart 2`).
 | Launch Mode | **Docker ENTRYPOINT** |
 | Disk | 150 GB+ |
 | GPUs | 4 |
-| Account env var | `GITHUB_TOKEN` = the key from your admin |
+| Account env var | `GITHUB_TOKEN` = the key from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
 | First start | ~20–30 min |
 | Later starts | ~1 min |
 | End of day | **STOP** (not Destroy) |
 
 ---
 
-## For admins: creating the access key
+## For WASasquatch / Colossul: issuing the access key
 
-The `GITHUB_TOKEN` in Step 2 is a GitHub **fine-grained personal access token**:
+Only someone with access to the private `storyrender-services` repository can
+create this. The `GITHUB_TOKEN` in Step 2 is a GitHub **fine-grained personal
+access token**:
 
 1. [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
 2. **Repository access** → *Only select repositories* → `storyrender-services`
@@ -255,3 +274,6 @@ The `GITHUB_TOKEN` in Step 2 is a GitHub **fine-grained personal access token**:
 
 Read-only on one repository is all the server needs. Rotate it when someone
 leaves the team, and re-issue it when it expires.
+
+Hand it over privately — a DM or password manager, not a group channel. Anyone
+holding it can read the Storyrendr source.

@@ -76,7 +76,7 @@ loopback. To expose their FastAPI `/docs` too, regenerate with
 
 | Variable | Value |
 |---|---|
-| `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrender-services` |
+| `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrender-services` — request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
 
 A fine-grained token scoped to that single repository with **Contents: Read**
 is sufficient — it does not need write or org-wide access.

@@ -17,6 +17,13 @@ on:
         required: false
         default: "vastai/comfy:v0.30.0-cuda-13.2-py312"
 
+# Two pushes in quick succession would otherwise race to publish :latest, and
+# nothing guarantees the newer build finishes last. Supersede instead: cancel
+# the in-flight run so :latest always reflects the most recent commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}

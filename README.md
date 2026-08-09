@@ -339,7 +339,7 @@ colossul-seats provision && colossul-seats restart all
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GITHUB_TOKEN` | — | **Required.** PAT with read access to the private repo. |
+| `GITHUB_TOKEN` | — | **Required.** PAT with read access to the private repo. Issued by [@WASasquatch](https://github.com/WASasquatch) (Colossul). |
 | `STORYRENDR_REF` | `main` | Branch/tag/SHA to deploy. |
 | `STORYRENDR_REPO` | the Colossul repo | Override to deploy a fork. |
 | `NUM_SEATS` | `4` | Seat count. Also update `PORTAL_CONFIG` — see below. |
