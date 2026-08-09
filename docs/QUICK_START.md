@@ -93,6 +93,11 @@ Colossul Storyrendr — 4 seats
 ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 ```
 
+> **If you're told to use a specific version**, paste that instead — it'll look
+> like `...colossul-vast-multiseat:sha-c833194`. Rented machines sometimes hold
+> on to an old copy of `latest`, so a version number is the reliable way to be
+> sure you're getting the newest software.
+
 **Docker Options** (this opens the doors artists connect through)
 ```
 -p 1111:1111 -p 8080:8080 -p 8190:8190 -p 8191:8191 -p 8200:8200 -p 8201:8201 -p 8210:8210 -p 8211:8211 -p 8220:8220 -p 8221:8221
@@ -286,7 +291,13 @@ Open button.**
 The server is running fine — Vast just doesn't know which page to open. This
 happens on instances created from an older version of our image.
 
-Quickest fix: **destroy it and rent again**, so you get the current image.
+**Destroying and renting again is often not enough**, because the machine can
+still be holding its own old copy of `latest`. Do this instead:
+
+1. Edit your template's **Image Path:Tag** to the exact version you were given,
+   e.g. `ghcr.io/wasasquatch/colossul-vast-multiseat:sha-c833194`.
+2. Destroy the instance and rent again — ideally on a **different machine**
+   (check the IP address differs from the last one).
 
 To rescue the one you have:
 1. Click the **⇄** (IP & Port Info) button on the instance card.

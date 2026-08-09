@@ -14,8 +14,22 @@ Template" form on [cloud.vast.ai](https://cloud.vast.ai/templates/).
 ## 1. Image
 
 ```
-ghcr.io/wasasquatch/colossul-vast-multiseat:latest
+ghcr.io/wasasquatch/colossul-vast-multiseat:sha-<short-commit>
 ```
+
+> **Pin a `sha-` tag rather than `:latest`.** Vast hosts cache images, and a
+> machine that has previously pulled `:latest` can keep serving *its* older copy
+> even after the tag moves in the registry — you rent a new instance and get the
+> old image, with no indication anything is stale. A `sha-` tag is immutable and
+> one the host has never seen, so it always forces a real pull.
+>
+> Symptom to watch for: you ship an image fix, rent fresh, and the instance
+> behaves exactly as before. Renting on a *different* machine also works, but
+> pinning is the reliable answer.
+>
+> Find the current tag under
+> [Packages](https://github.com/WASasquatch/colossul-vast-multiseat/pkgs/container/colossul-vast-multiseat)
+> or in the CI run summary.
 
 Published automatically by CI and **publicly pullable** — verified anonymously,
 so a Vast host needs no registry credentials. Two CUDA variants are built from
