@@ -174,6 +174,67 @@ echo "  $unpinned of ${#ENTRIES[@]} entries unpinned"
 echo "PASS: commit pins are clonable"
 
 echo ""
+echo "=== 6d. a pack that fights the protected set still installs ==="
+# Real cases from the manifest: MusePose hard-pins opencv==4.8.1.78, and numpy
+# conflicts usually arrive TRANSITIVELY (a dependency still says numpy<2). Under
+# a plain constrained install pip fails the whole file, so the pack's other
+# dependencies never install and it can never load. It must degrade, not die.
+sed -n '/^install_reqs()/,/^}/p' "$ROOT/scripts/install-custom-nodes.sh" > "$T/fn.sh"
+grep -q 'no-deps' "$T/fn.sh" \
+    || fail "no --no-deps fallback: a transitive numpy pin would kill the pack outright"
+grep -q 'filtered' "$T/fn.sh" \
+    || fail "should retry without the lines that pin protected packages"
+
+# Exercise the three tiers with a stub installer that fails exactly like pip.
+mkdir -p "$T/pk"
+printf 'opencv-python==4.8.1.78\nsome-real-dep\n' > "$T/pk/requirements.txt"
+cat > "$T/uv" <<'EOF'
+#!/usr/bin/env bash
+# Emulate pip-under-constraints: fail when the requirements file being read
+# pins a protected package; succeed otherwise. install_reqs cd's into the pack
+# directory first, so the -r path is relative to THIS process's cwd.
+echo "$*" >> "$UVLOG"
+case "$*" in *--no-deps*) exit 0 ;; esac
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "-r" ] && [ -f "$a" ]; then
+        grep -qE '^(opencv[a-z-]*|numpy|torch)[<>=]' "$a" && exit 1
+    fi
+    prev="$a"
+done
+exit 0
+EOF
+chmod +x "$T/uv"
+(
+    export UVLOG="$T/uv.log" PATH="$T:$PATH" COMFYUI_PYTHON="$PY"
+    export PROTECTED_PACKAGES="torch numpy opencv-python opencv-python-headless"
+    # shellcheck disable=SC1090
+    source "$T/fn.sh"
+    # shellcheck disable=SC2034  # appended to by the sourced install_reqs
+    FAILED=()
+    cd "$T" && install_reqs "$T/pk" TestPack
+) > "$T/tiers.log" 2>&1
+if grep -q 'ignoring' "$T/tiers.log"; then
+    echo "  pinned protected line detected and reported"
+else
+    fail "should report which protected pins it ignored: $(cat "$T/tiers.log")"
+fi
+grep -qE 'requirements-filtered' "$T/uv.log" \
+    || fail "second tier never ran with a filtered requirements file: $(cat "$T/uv.log")"
+echo "  falls back to a filtered install rather than dropping every dependency"
+echo "PASS: conflicting packs degrade instead of failing outright"
+
+echo ""
+echo "=== 6e. the shared environment is verified afterwards ==="
+# A downgraded numpy breaks every pack at once; a CPU torch just makes all four
+# seats mysteriously slow. Neither should be discoverable only by an artist.
+grep -q 'Verifying the shared environment' "$ROOT/scripts/install-custom-nodes.sh" \
+    || fail "installer should verify protected packages are unchanged when it finishes"
+grep -q 'cuda.is_available' "$ROOT/scripts/install-custom-nodes.sh" \
+    || fail "drift report should tell the operator how to check torch/CUDA"
+echo "PASS: post-install drift check present"
+
+echo ""
 echo "=== 7. Manager: flag passed AND the self-disabling checkout retired ==="
 grep -q -- '--enable-manager' "$ROOT/scripts/seat-comfyui.sh" \
     || fail "seat-comfyui.sh must pass --enable-manager"

@@ -52,17 +52,87 @@ install_reqs() {
     local req="$dir/requirements.txt"
     [ -f "$req" ] || return 0
     log "  deps: $name"
-    if ! ( cd "$dir" && uv pip install --python "$COMFYUI_PYTHON" \
+    if ( cd "$dir" && uv pip install --python "$COMFYUI_PYTHON" \
             --no-cache-dir -r requirements.txt >/dev/null 2>&1 ); then
-        # Retry showing output, so the log explains WHY rather than just failing.
-        warn "  deps failed for $name — retrying verbosely:"
-        ( cd "$dir" && uv pip install --python "$COMFYUI_PYTHON" \
-            --no-cache-dir -r requirements.txt 2>&1 | tail -15 | sed 's/^/[colossul]       /' )
-        warn "  $name may not load. A conflict against the protected pins above is"
-        warn "  the likely cause — that is the protection working, not a bug."
-        FAILED+=("$name (deps)")
-        return 1
+        return 0
     fi
+
+    # Second attempt, without the lines that fight the protected set.
+    #
+    # Packs routinely hard-pin torch/opencv/numpy to whatever was current when
+    # they were written (MusePose pins opencv==4.8.1.78, from 2023). Under our
+    # constraints that line cannot resolve — correctly, since honouring it would
+    # downgrade opencv for all four seats. But pip fails the WHOLE file on one
+    # bad line, so the pack's dozen other, perfectly installable dependencies
+    # were being dropped too, and the pack could never work.
+    #
+    # So: drop only the protected lines, install the rest normally, and say
+    # exactly what was ignored. The pack gets its real dependencies and keeps
+    # the environment's torch/opencv, which is nearly always what you want.
+    local filtered="$dir/.colossul-requirements-filtered.txt"
+    local dropped
+    dropped="$("$COMFYUI_PYTHON" - "$req" "$filtered" "$PROTECTED_PACKAGES" <<'PY'
+import re, sys
+src, out, protected = sys.argv[1], sys.argv[2], set(sys.argv[3].split())
+kept, removed = [], []
+for line in open(src, encoding="utf-8", errors="replace"):
+    bare = line.split("#", 1)[0].strip()
+    if not bare:
+        kept.append(line.rstrip("\n")); continue
+    # Package name is everything before the first version/extra/marker char.
+    name = re.split(r"[<>=!~;\[\s]", bare, 1)[0].strip().lower().replace("_", "-")
+    if name in protected:
+        removed.append(bare)
+    else:
+        kept.append(line.rstrip("\n"))
+open(out, "w", encoding="utf-8").write("\n".join(kept) + "\n")
+print("; ".join(removed))
+PY
+    )" || dropped=""
+
+    if [ -n "$dropped" ]; then
+        warn "  $name pins packages we manage; ignoring: $dropped"
+        if ( cd "$dir" && uv pip install --python "$COMFYUI_PYTHON" \
+                --no-cache-dir -r "$(basename "$filtered")" >/dev/null 2>&1 ); then
+            log "  deps: $name installed without those lines (environment torch/opencv kept)"
+            rm -f "$filtered"
+            return 0
+        fi
+    fi
+    # Third attempt: --no-deps.
+    #
+    # This is the numpy case, and it is the common one. The conflict is usually
+    # not a line in requirements.txt at all — it is TRANSITIVE. A pack asks for
+    # some library, that library still declares `numpy<2`, the image ships numpy
+    # 2.x, and the resolver reports an impossible resolution naming numpy even
+    # though no pack mentioned a version. Filtering direct lines cannot fix that,
+    # because the offending constraint is inside a dependency.
+    #
+    # --no-deps installs exactly what the pack asked for and resolves nothing
+    # further, so the stale transitive bound is never considered. The risk is a
+    # second-level dependency going missing, which surfaces honestly as
+    # (IMPORT FAILED) at seat startup rather than as a silently downgraded numpy
+    # breaking every other pack in the shared venv.
+    local target="requirements.txt"
+    [ -n "$dropped" ] && target="$(basename "$filtered")"
+    if ( cd "$dir" && uv pip install --python "$COMFYUI_PYTHON" \
+            --no-cache-dir --no-deps -r "$target" >/dev/null 2>&1 ); then
+        warn "  $name: installed with --no-deps (a transitive pin, usually numpy,"
+        warn "  could not be satisfied without changing the shared environment)."
+        warn "  Watch for (IMPORT FAILED) from $name in the seat startup table."
+        rm -f "$filtered"
+        FAILED+=("$name (installed --no-deps)")
+        return 0
+    fi
+    rm -f "$filtered"
+
+    # Genuinely broken. Show why rather than just failing.
+    warn "  deps failed for $name — retrying verbosely:"
+    ( cd "$dir" && uv pip install --python "$COMFYUI_PYTHON" \
+        --no-cache-dir -r requirements.txt 2>&1 | tail -15 | sed 's/^/[colossul]       /' )
+    warn "  $name may not load; it will show (IMPORT FAILED) in the seat startup table."
+    FAILED+=("$name (deps)")
+    return 1
 }
 
 # Some packs ship an install.py that fetches models or builds extensions.
@@ -160,6 +230,46 @@ else
         fi
         install_reqs "$dest" "$name" && run_install_py "$dest" "$name"
     done
+fi
+
+# ── 2b. Did the shared environment survive? ─────────────────────────────────
+# The whole point of the constraints file is that torch/numpy/opencv are the
+# SAME afterwards. Verify it rather than assume it: a downgraded numpy breaks
+# every pack at once and, worse, a CPU torch silently makes all four seats slow
+# instead of failing. Compare against the pins written before any installing.
+if [ -s "${CONSTRAINTS:-}" ]; then
+    log "Verifying the shared environment was not altered..."
+    drifted="$("$COMFYUI_PYTHON" - "$CONSTRAINTS" <<'PY'
+import sys
+try:
+    import importlib.metadata as md
+except ImportError:
+    sys.exit(0)
+bad = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    line = line.strip()
+    if not line or "==" not in line:
+        continue
+    name, want = line.split("==", 1)
+    try:
+        have = md.version(name)
+    except Exception:
+        bad.append(f"{name}: GONE (was {want})")
+        continue
+    if have != want:
+        bad.append(f"{name}: {want} -> {have}")
+print("\n".join(bad))
+PY
+    )" || drifted=""
+    if [ -n "$drifted" ]; then
+        warn "  A custom node CHANGED a protected package:"
+        printf '%s\n' "$drifted" | while IFS= read -r l; do warn "    $l"; done
+        warn "  This affects every seat. If torch moved, inference may now be on CPU."
+        warn "  Check with: $COMFYUI_PYTHON -c 'import torch; print(torch.__version__, torch.cuda.is_available())'"
+        FAILED+=("environment drift: $(printf '%s' "$drifted" | tr '\n' ' ')")
+    else
+        log "  torch / numpy / opencv / onnxruntime all unchanged."
+    fi
 fi
 
 # ── 3. ComfyUI-Manager ──────────────────────────────────────────────────────
