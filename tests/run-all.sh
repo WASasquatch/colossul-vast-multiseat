@@ -32,6 +32,27 @@ else
     echo "FAIL scripts/patches/patch_vite_backend_url.py"; rc=1
 fi
 
+note "EXECUTABLE BITS"
+# Supervisor execs these directly, so a lost +x bit is a broken seat. Editing
+# over a Windows/UNC mount silently drops it, so check here rather than
+# discovering it in CI after the fact. (lib/ and patches/ are sourced or run
+# via an interpreter and are correctly non-executable.)
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    for f in scripts/provision.sh scripts/seat-*.sh scripts/bin/*; do
+        mode="$(git ls-files -s "$f" | cut -d' ' -f1)"
+        if [ -z "$mode" ]; then
+            echo "SKIP $f (not tracked yet)"
+        elif [ "$mode" = "100755" ]; then
+            echo "OK   $mode $f"
+        else
+            echo "FAIL $mode $f  -> run: chmod +x $f && git add $f"
+            rc=1
+        fi
+    done
+else
+    echo "SKIP (not a git repo)"
+fi
+
 note "PARALLELISM"
 bash tests/check-parallelism.sh || rc=1
 
