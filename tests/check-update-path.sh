@@ -108,4 +108,17 @@ grep -q 'supervisorctl restart "seat' "$ROOT/scripts/provision.sh" \
 echo "PASS: seats are restarted when a new build lands"
 
 echo ""
+echo "=== 9. the supervisor reachability guard must not use 'status' ==="
+# `supervisorctl status` exits non-zero if ANY program isn't RUNNING, and the
+# base image's pyworker/syncthing/tensorboard are one-shots that exit at boot -
+# so gating on `! supervisorctl status` aborts provisioning on a healthy
+# instance, right before the seats start. Must be `pid` (or `version`).
+if grep -qE 'if ! supervisorctl status' "$ROOT/scripts/provision.sh"; then
+    fail "provision.sh gates on 'supervisorctl status' - exits non-zero when base one-shots have exited, killing provisioning before the seats start. Use 'supervisorctl pid'."
+fi
+grep -qE 'supervisorctl pid' "$ROOT/scripts/provision.sh" \
+    || fail "provision.sh should probe daemon reachability with 'supervisorctl pid'"
+echo "PASS: reachability probe uses 'supervisorctl pid', not 'status'"
+
+echo ""
 echo "ALL UPDATE PATH CHECKS PASSED"

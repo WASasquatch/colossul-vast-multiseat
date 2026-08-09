@@ -355,13 +355,22 @@ for ((i = 0; i < SEAT_COUNT; i++)); do
 done
 
 log "Reloading supervisor..."
-if ! supervisorctl status >/dev/null 2>&1; then
+# Reachability probe MUST be `supervisorctl pid` (or `version`), never `status`.
+# `supervisorctl status` exits NON-ZERO whenever ANY managed program is not
+# RUNNING — and the base image's pyworker/syncthing/tensorboard are one-shots
+# that exit 0 within seconds of boot — so gating on it aborts provisioning on a
+# perfectly healthy instance, right before the seats start. `pid` returns the
+# daemon PID and exits 0 whenever the daemon itself is up, regardless of program
+# states. (This exact bug ate provisioning on the first instance that got here.)
+if ! supervisorctl pid >/dev/null 2>&1; then
     die "supervisord is not reachable, so the seat units cannot be started.
        Inside a running instance this should never happen; if you ran this
        script manually outside the container, start supervisord first."
 fi
-supervisorctl reread
-supervisorctl update
+# Guarded so a transient hiccup here can't abort before the seats are started
+# and the access summary is printed.
+supervisorctl reread || warn "supervisorctl reread reported an error — continuing."
+supervisorctl update || warn "supervisorctl update reported an error — if a seat is missing, run: colossul-seats restart all"
 
 # `supervisorctl update` only (re)starts programs whose CONFIG changed. After a
 # source update the configs are identical, so without this the seats would keep
