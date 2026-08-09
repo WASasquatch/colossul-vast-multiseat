@@ -409,7 +409,9 @@ Access is supplied at *runtime*, by the operator, as a `GITHUB_TOKEN` in their
 own Vast template. Recommended handling:
 
 - Use a **fine-grained PAT** scoped to `storyrender-services` alone, with
-  **Contents: Read** and nothing else. It does not need write or org access.
+  **Contents: Read-only** — the only permission you select. GitHub adds
+  **Metadata: Read-only** automatically and won't let you remove it. Nothing
+  else is needed: provisioning clones and fetches, never pushes.
 - Give it an **expiry**, and rotate it when employees change.
 - Treat it as readable by anyone who can reach the instance: it lands in the
   container's environment, and all seats share the instance's Vast token. It is

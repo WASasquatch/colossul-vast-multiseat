@@ -78,8 +78,17 @@ loopback. To expose their FastAPI `/docs` too, regenerate with
 |---|---|
 | `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrender-services` — request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
 
-A fine-grained token scoped to that single repository with **Contents: Read**
-is sufficient — it does not need write or org-wide access.
+A fine-grained token scoped to that single repository is sufficient:
+
+| Permission | Access |
+|---|---|
+| **Contents** | **Read-only** — the only one you select |
+| **Metadata** | Read-only — added automatically by GitHub, cannot be removed |
+
+Nothing else: no write access, no Actions/PRs/Packages, no account permissions.
+Provisioning only clones and fetches; it never pushes. The public
+`ComfyUI_VNCCS_Utils` submodule needs no extra grant — GitHub tokens always
+carry read-only access to public repositories.
 
 **Recommended:**
 

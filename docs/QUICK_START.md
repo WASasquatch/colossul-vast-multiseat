@@ -264,16 +264,40 @@ admin — it's one command (`colossul-seats restart 2`).
 
 Only someone with access to the private `storyrender-services` repository can
 create this. The `GITHUB_TOKEN` in Step 2 is a GitHub **fine-grained personal
-access token**:
+access token**.
 
 1. [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
-2. **Repository access** → *Only select repositories* → `storyrender-services`
-3. **Permissions** → *Repository permissions* → **Contents: Read-only**
-4. Set an **expiry** (90 days is reasonable) and create it.
-5. Copy the `github_pat_...` value — GitHub shows it once.
+2. **Resource owner** → your own account (the repo lives at
+   `WASasquatch/storyrender-services`).
+3. **Expiration** → 90 days is reasonable.
+4. **Repository access** → *Only select repositories* → `storyrender-services`.
+5. **Permissions** → *Repository permissions*:
 
-Read-only on one repository is all the server needs. Rotate it when someone
-leaves the team, and re-issue it when it expires.
+| Permission | Access | Why |
+|---|---|---|
+| **Contents** | **Read-only** | The only one you set. Lets the server `git clone`/`fetch` the source. |
+| **Metadata** | Read-only | GitHub adds this **automatically** and won't let you remove it — it's mandatory whenever a token touches a repository. Expect to see it pre-ticked. |
+
+**That is the entire list.** Nothing else — no write access anywhere, no
+Actions, Pull requests, Issues, Packages, Webhooks, or any account permission.
+The server only ever reads the source; it never pushes.
+
+6. Create it and copy the `github_pat_...` value — GitHub shows it once.
+
+### Notes
+
+- **The public submodule works automatically.** Storyrendr pulls in
+  `AHEKOT/ComfyUI_VNCCS_Utils` (Pose Studio), which is a public third-party
+  repository. You do **not** need to add it: GitHub tokens "always include
+  read-only access to all public repositories", so restricting the token to one
+  repo doesn't break it.
+- **If the repo ever moves to a Colossul organization**, two extra steps apply:
+  the org must enable *Allow access via fine-grained personal access tokens*,
+  and an org owner may have to approve the token — it stays **pending** and the
+  server will fail to clone until they do.
+- **On expiry**, provisioning fails with an authentication error and the seats
+  never start. Issue a fresh token, update it in the operator's Vast account
+  settings, and STOP/START the instance.
 
 Hand it over privately — a DM or password manager, not a group channel. Anyone
-holding it can read the Storyrendr source.
+holding it can read the Storyrendr source. Rotate it when someone leaves.
