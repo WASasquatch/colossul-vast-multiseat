@@ -1,13 +1,19 @@
 # Model manifest for the shared ComfyUI_Assets tree.
 #
-# Format, one entry per line:   <dest-path>  <bytes>  <url>
+# Format, one entry per line:
+#
+#     <dest-path>  <url>              <- the easy way; size looked up for you
+#     <dest-path>  <bytes>  <url>     <- size pinned
 #
 #   dest-path  relative to ComfyUI_Assets/, e.g. models/vae/foo.safetensors.
 #              Written first so the layout reads at a glance, and so a file can
 #              be renamed on the way in.
-#   bytes      expected size, or "-" to look it up over the network. Used to
-#              check free disk BEFORE a 20 GB download starts, to skip files
-#              already complete, and to tell "complete" from "truncated".
+#   bytes      OPTIONAL. Never go hunting for a byte count to add a model: leave
+#              it out and the size is fetched from the server before anything
+#              downloads. Pinning it only saves one HEAD request per file, and
+#              turns a file that silently changed upstream into a visible error.
+#              Fill them all in automatically with:
+#                  colossul-seats models --sizes > models.txt.new
 #   url        direct download URL.
 #
 #              Use canonical huggingface.co/<repo>/resolve/main/... links.
@@ -15,26 +21,65 @@
 #              those carry Expires= and Signature= and stop working within
 #              hours, so a manifest full of them is broken by tomorrow.
 #
-# Sets: a [name] header starts a set, and NOTHING downloads unless you ask for
-# it by name — these are tens of gigabytes and cost real money on a rented box.
+# A [name] header starts a set. NOTHING downloads unless a set is named — these
+# are tens of gigabytes and cost real money on a rented box.
 #
-#     colossul-seats models minimax-h3        # on a running instance
-#     colossul-seats models --list            # what's defined, and its size
-#     MODEL_SETS=minimax-h3 ...               # at provision time
+# ── COMMANDS ────────────────────────────────────────────────────────────────
 #
-# Gated repos need a token:  export HF_TOKEN=hf_...
-# It is read from the environment only and never stored here.
+#   colossul-seats models --list
+#       Every set defined here, its file count and total size. Instant, offline.
 #
-# Downloads resume. Re-running is cheap and safe: anything already at its full
-# size is skipped, and a partial file continues from where it stopped.
+#   colossul-seats models --check [set...]
+#       Resolve every URL, compare the server's size against this file, and
+#       check free disk — without transferring a byte. Exits non-zero if
+#       anything is wrong, so it can gate a script. With no set named, checks
+#       all of them. Run this first: a dead link or gated repo shows up in
+#       seconds instead of twenty minutes into a 40 GB download.
+#
+#   colossul-seats models minimax-h3
+#       DOWNLOAD that set. Several may be named at once:
+#           colossul-seats models minimax-h3 minimax-h3-ref2va
+#
+#   colossul-seats models --all
+#       Download every set defined here. Check the total with --list first.
+#
+#   colossul-seats models --sizes > /tmp/models.new
+#       Print this file with every omitted byte count filled in from the
+#       server, so sizes can be pinned without collecting them by hand.
+#
+# On a running instance this file lives at /opt/colossul/models.txt — edit it
+# there and re-run the command; no rebuild needed. Edits are lost when the
+# instance is destroyed, so put anything permanent in the repo copy.
+#
+# ── AT PROVISION TIME ───────────────────────────────────────────────────────
+#
+# Set MODEL_SETS to download automatically when the instance comes up, either
+# as `-e MODEL_SETS=minimax-h3` in the Vast template's Docker Options, or as
+# ENV MODEL_SETS=... in the Dockerfile. Comma- or space-separated:
+#
+#     MODEL_SETS=minimax-h3,minimax-h3-ref2va
+#
+# Unset means no downloads. Seats start either way, so a slow or failed
+# download never blocks the instance coming up.
+#
+# ── AUTHENTICATION ──────────────────────────────────────────────────────────
+#
+# Gated repos need HF_TOKEN. Set it as a Vast ACCOUNT-level environment
+# variable, the same place GITHUB_TOKEN goes; `export HF_TOKEN=hf_...` works
+# for a manual run. It is read from the environment only, is never written to
+# this file, and is never printed to the log.
+#
+# ── RE-RUNNING ──────────────────────────────────────────────────────────────
+#
+# Always safe and cheap. Files already at their full size are skipped, and an
+# interrupted transfer resumes where it stopped rather than starting over — so
+# after a dropped connection, just run the same command again.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MiniMax H3 — first-and-last-frame to video, with audio.
 # 42.5 GB. Repo: https://huggingface.co/Comfy-Org/MiniMax-H3
 #
-# These are the pruned int8 convrot / nvfp4 quantisations, which is what was
-# tested. The same repo also has bf16 and fp8_scaled builds of both diffusion
-# models if you have the VRAM and want maximum quality.
+# These are the pruned int8 convrot / nvfp4 quantisations
 # ─────────────────────────────────────────────────────────────────────────────
 [minimax-h3]
 models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors  20970379616  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors
@@ -49,5 +94,8 @@ models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors  20970
 
 # 4-step turbo LoRA — trades some quality for a large speedup on H3.
 # Unverified against your workflows; enable if your artists ask for it.
+#
+# Also an example of the two-field form: no byte count, just where it goes and
+# where it comes from. That is all a new entry ever needs.
 #[minimax-h3-turbo]
-#models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors  -  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors
+#models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors

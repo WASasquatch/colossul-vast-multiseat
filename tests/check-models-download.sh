@@ -225,6 +225,44 @@ echo "  wrong declared size detected"
 echo "PASS: --check catches dead URLs and bad sizes, downloads nothing"
 
 echo ""
+echo "=== 8d. the size field is optional: 'dest url' works ==="
+# Nobody should have to go find a byte count to add a model. The two-field form
+# must not be a second-class citizen: it needs the same skip / resume /
+# truncation protection, which means the size gets resolved from the server.
+cat > "$T/nosize.txt" <<EOF
+[easy]
+models/vae/nosize.safetensors  $BASE/small.bin
+EOF
+NST="$COLOSSUL_ASSETS_ROOT/models/vae/nosize.safetensors"
+out="$(MODEL_MANIFEST="$T/nosize.txt" MODEL_SETS="" bash "$SH" easy 2>&1)"; rc=$?
+[ "$rc" = "0" ] || fail "two-field entry failed to download: $out"
+cmp -s "$NST" "$T/srv/small.bin" || fail "two-field entry produced wrong bytes: $out"
+grep -qi 'looking up' <<< "$out" || fail "should say it resolved the missing size: $out"
+echo "  downloaded correctly, size resolved from the server"
+
+# The resolved size must then do real work — a truncated file has to be
+# detected exactly as it would be with a declared size.
+head -c 400000 "$T/srv/small.bin" > "$NST"
+out="$(MODEL_MANIFEST="$T/nosize.txt" MODEL_SETS="" bash "$SH" easy 2>&1)"
+cmp -s "$NST" "$T/srv/small.bin" \
+    || fail "truncation was NOT repaired for an entry without a declared size: $out"
+echo "  truncation still detected and repaired without a declared size"
+
+# And a complete file must still be skipped rather than re-fetched.
+before=$(stat -c %Y "$NST"); sleep 1
+out="$(MODEL_MANIFEST="$T/nosize.txt" MODEL_SETS="" bash "$SH" easy 2>&1)"
+[ "$before" = "$(stat -c %Y "$NST")" ] || fail "re-downloaded a complete file that had no declared size: $out"
+echo "  complete file still skipped"
+
+# --sizes turns the easy form into the pinned form, so nobody hand-collects.
+out="$(MODEL_MANIFEST="$T/nosize.txt" MODEL_SETS="" bash "$SH" --sizes 2>/dev/null)"
+grep -qE "models/vae/nosize\.safetensors[[:space:]]+${SMALL_SIZE}[[:space:]]+http" <<< "$out" \
+    || fail "--sizes did not fill in the real byte count: $out"
+grep -q '^\[easy\]' <<< "$out" || fail "--sizes must preserve set headers: $out"
+echo "  --sizes filled in $SMALL_SIZE and kept the set header"
+echo "PASS: size is genuinely optional, with no loss of protection"
+
+echo ""
 echo "=== 9. the token is never sent to a non-HuggingFace host ==="
 # Comments are stripped first — the script deliberately *mentions*
 # --location-trusted to explain why it must not be used.
@@ -300,9 +338,10 @@ grep -q 'cdn\.hf\.co' <<< "$ENTRY_LINES" && fail "models.txt uses cdn.hf.co link
 while IFS= read -r l; do
     [ -n "$l" ] || continue
     read -r d s u _ <<< "$l"
-    [ -n "$u" ] || fail "entry has no URL (needs 'dest size url'): $l"
-    case "$u" in http://*|https://*) ;; *) fail "third field is not a URL: $l" ;; esac
-    case "$s" in -|[0-9]*) ;; *) fail "second field must be bytes or '-': $l" ;; esac
+    case "$s" in *://*) u="$s"; s="-" ;; esac   # two-field form: dest url
+    [ -n "$u" ] || fail "entry has no URL (needs 'dest [bytes] url'): $l"
+    case "$u" in http://*|https://*) ;; *) fail "URL field is not a URL: $l" ;; esac
+    case "$s" in -|[0-9]*) ;; *) fail "size field must be bytes or omitted: $l" ;; esac
     case "$d" in models/*) ;; *) fail "dest should live under models/: $l" ;; esac
 done <<< "$ENTRY_LINES"
 n=$(grep -c . <<< "$ENTRY_LINES")

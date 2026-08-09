@@ -41,12 +41,40 @@ parse_manifest() {
             set = $0; next
         }
         {
-            dest = $1; size = $2; url = $3
+            dest = $1
+            # The size is optional: "dest url" and "dest bytes url" are both
+            # valid. Detected by whether field 2 looks like a URL, so nobody has
+            # to go and find a byte count just to add a model.
+            if ($2 ~ /^[a-z][a-z0-9+.-]*:\/\//) { size = "-"; url = $2 }
+            else                                { size = $2;  url = $3 }
             if (dest == "" || url == "") next
+            if (size == "") size = "-"
             if (set == "") set = "(unset)"
             print set "\t" dest "\t" size "\t" url
         }
     ' "$MANIFEST"
+}
+
+# Ask the server what a URL is: prints "<http-code>\t<total-bytes>".
+#
+# Used both by --check and to fill in an omitted size, so the two can never
+# disagree about what the server said.
+probe_url() {
+    local url="$1" hdr code total
+    hdr="$(curl -sIL --max-time 45 ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
+    code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
+    # Some CDNs answer HEAD with 403/405; retry as a GET for a single byte.
+    if [ -z "$code" ] || { [ "$code" -ge 400 ] 2>/dev/null; }; then
+        hdr="$(curl -sL --max-time 45 -r 0-0 -D - -o /dev/null ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
+        code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
+    fi
+    # On a 206 the true size is the denominator of Content-Range; Content-Length
+    # there is only the slice we asked for, so it must not be used.
+    total="$(grep -i '^content-range:' <<< "$hdr" | tail -1 | tr -d '\r' \
+             | sed -n 's#.*/\([0-9][0-9]*\).*#\1#p')"
+    [ -n "$total" ] || [ "$code" != "200" ] || \
+        total="$(grep -i '^content-length:' <<< "$hdr" | tail -1 | tr -d '\r' | awk '{print $2}')"
+    printf '%s\t%s\n' "${code:-000}" "${total:-}"
 }
 
 list_sets() {
@@ -62,6 +90,32 @@ list_sets() {
 
 human() { awk -v b="${1:-0}" 'BEGIN { printf (b >= 1e9 ? "%.1f GB" : "%.0f MB"), (b >= 1e9 ? b/1e9 : b/1e6) }'; }
 
+# ── Auth ────────────────────────────────────────────────────────────────────
+# Established before ANY command that touches the network, so --check and
+# --sizes exercise exactly the credentials a real download would use.
+#
+# The token goes ONLY to huggingface.co. HF answers /resolve/ with a redirect to
+# a pre-signed CDN URL that needs no auth, and curl drops the Authorization
+# header across hosts by default — which is what we want. Do not "fix" this with
+# --location-trusted: that hands your token to every host in the redirect chain.
+#
+# HF_TOKEN arrives the same way GITHUB_TOKEN does: set it as a Vast ACCOUNT-level
+# environment variable and the base image writes it to /etc/environment, which
+# load_vast_environment() sourced above. $WORKSPACE/.env works too.
+AUTH=()
+if [ -n "${HF_TOKEN:-}" ]; then
+    AUTH=(--header "Authorization: Bearer ${HF_TOKEN}")
+fi
+# Whether a token is in play is worth stating; its value never is — the
+# provisioning log is readable through the instance portal.
+announce_auth() {
+    if [ "${#AUTH[@]}" -gt 0 ]; then
+        log "Authenticating to huggingface.co with HF_TOKEN (…${HF_TOKEN: -4})"
+    else
+        log "No HF_TOKEN set — public repos only. Gated ones will 401/403."
+    fi
+}
+
 # ── Argument handling ───────────────────────────────────────────────────────
 WANT=()
 CHECK_ONLY=0
@@ -72,6 +126,27 @@ case "${1:-}" in
         list_sets
         echo ""
         echo "Download one with:  colossul-seats models <set>"
+        exit 0
+        ;;
+    --sizes)
+        # Print the manifest with every omitted size filled in, so sizes can be
+        # pinned without anyone hand-collecting byte counts:
+        #     colossul-seats models --sizes > models.txt.new
+        shift
+        while IFS= read -r line; do
+            trimmed="${line#"${line%%[![:space:]]*}"}"
+            case "$trimmed" in ''|'#'*|'['*) printf '%s\n' "$line"; continue ;; esac
+            read -r d s u _ <<< "$line"
+            case "$s" in
+                *://*) u="$s"; s="-" ;;   # two-field form: dest url
+            esac
+            if [ "$s" = "-" ] || [ -z "$s" ]; then
+                IFS=$'\t' read -r _c total < <(probe_url "$u")
+                s="${total:--}"
+                [ "$s" = "-" ] && warn "could not size $u (HTTP $_c)" >&2
+            fi
+            printf '%s  %s  %s\n' "$d" "$s" "$u"
+        done < "$MANIFEST"
         exit 0
         ;;
     --check|--dry-run|-n)
@@ -109,26 +184,6 @@ for s in "${WANT[@]}"; do
     }
 done
 
-# ── Auth ────────────────────────────────────────────────────────────────────
-# Set before anything reaches the network, so --check exercises exactly the
-# credentials a real download would use.
-#
-# The token goes ONLY to huggingface.co. HF answers /resolve/ with a redirect to
-# a pre-signed CDN URL that needs no auth, and curl drops the Authorization
-# header across hosts by default — which is what we want. Do not "fix" this with
-# --location-trusted: that hands your token to every host in the redirect chain.
-# HF_TOKEN arrives the same way GITHUB_TOKEN does: set it as a Vast ACCOUNT-level
-# environment variable and the base image writes it to /etc/environment, which
-# load_vast_environment() sourced above. $WORKSPACE/.env works too.
-AUTH=()
-if [ -n "${HF_TOKEN:-}" ]; then
-    AUTH=(--header "Authorization: Bearer ${HF_TOKEN}")
-    # Say so, but never echo the value — this log is world-readable in the portal.
-    log "Authenticating to huggingface.co with HF_TOKEN (…${HF_TOKEN: -4})"
-else
-    log "No HF_TOKEN set — public repos only. Gated ones will 401/403."
-fi
-
 # ── Selection, and what is actually still missing ───────────────────────────
 SELECTED="$(parse_manifest | awk -F'\t' -v want="$(printf '%s\n' "${WANT[@]}" | paste -sd'|')" '
     $1 ~ "^(" want ")$"')"
@@ -140,7 +195,7 @@ SELECTED="$(parse_manifest | awk -F'\t' -v want="$(printf '%s\n' "${WANT[@]}" | 
 if [ "$CHECK_ONLY" = "1" ]; then
     echo ""
     log "Checking sets: ${WANT[*]}   (no data will be downloaded)"
-    [ -n "${HF_TOKEN:-}" ] && log "  HF_TOKEN is set" || log "  HF_TOKEN is NOT set (fine unless a repo is gated)"
+    announce_auth
     echo ""
     printf '  %-8s %-52s %s\n' "STATUS" "FILE" "NOTE"
     problems=0; want_bytes=0; present=0
@@ -156,20 +211,7 @@ if [ "$CHECK_ONLY" = "1" ]; then
             continue
         fi
 
-        # -I can 405 on some CDNs; fall back to a ranged GET that pulls 1 byte.
-        hdr="$(curl -sIL --max-time 45 ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
-        code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
-        if [ -z "$code" ] || [ "$code" -ge 400 ] 2>/dev/null; then
-            hdr="$(curl -sL --max-time 45 -r 0-0 -D - -o /dev/null ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
-            code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
-        fi
-        # True file size: from Content-Range on a 206 (Content-Length there is
-        # only the slice we asked for, so comparing it would be nonsense), else
-        # from Content-Length on a 200.
-        remote="$(grep -i '^content-range:' <<< "$hdr" | tail -1 | tr -d '\r' \
-                  | sed -n 's#.*/\([0-9][0-9]*\).*#\1#p')"
-        [ -n "$remote" ] || [ "$code" != "200" ] || \
-            remote="$(grep -i '^content-length:' <<< "$hdr" | tail -1 | tr -d '\r' | awk '{print $2}')"
+        IFS=$'\t' read -r code remote < <(probe_url "$url")
 
         case "${code:-000}" in
             200|206)
@@ -181,7 +223,13 @@ if [ "$CHECK_ONLY" = "1" ]; then
                 else
                     printf '  %-8s %-52s %s\n' "ok" "$name" "$(human "$size")"
                 fi
-                [ "$size" != "-" ] && want_bytes=$((want_bytes + size))
+                # Count the server's number when the manifest doesn't declare
+                # one, or the disk check silently passes on a 0-byte total.
+                if [ "$size" != "-" ]; then
+                    want_bytes=$((want_bytes + size))
+                elif [ -n "$remote" ]; then
+                    want_bytes=$((want_bytes + remote))
+                fi
                 ;;
             401|403)
                 printf '  %-8s %-52s %s\n' "AUTH" "$name" "gated — needs a valid HF_TOKEN"
@@ -214,6 +262,31 @@ if [ "$CHECK_ONLY" = "1" ]; then
     exit 1
 fi
 
+# Fill in any omitted size by asking the server, so the disk precheck,
+# skip-if-complete and truncation detection all work whether or not a byte
+# count was written down. One HEAD per unsized entry; a manifest that declares
+# its sizes just skips this.
+UNSIZED=$(awk -F'\t' '$3 == "-"' <<< "$SELECTED" | grep -c . || true)
+if [ "$UNSIZED" -gt 0 ]; then
+    log "Looking up $UNSIZED file size(s) not declared in the manifest..."
+    RESOLVED=""
+    while IFS=$'\t' read -r set dest size url; do
+        [ -n "$dest" ] || continue
+        if [ "$size" = "-" ]; then
+            IFS=$'\t' read -r _code _total < <(probe_url "$url")
+            if [ -n "$_total" ]; then
+                size="$_total"
+            else
+                warn "  could not determine the size of $(basename "$dest") (HTTP $_code)"
+                warn "  it will still download, but disk cannot be checked in advance"
+            fi
+        fi
+        RESOLVED+="$set	$dest	$size	$url
+"
+    done <<< "$SELECTED"
+    SELECTED="${RESOLVED%$'\n'}"
+fi
+
 NEED_BYTES=0
 TODO=""
 while IFS=$'\t' read -r set dest size url; do
@@ -235,6 +308,7 @@ TODO_COUNT=$(grep -c . <<< "${TODO%$'\n'}" 2>/dev/null || echo 0)
 [ -n "${TODO//[[:space:]]/}" ] || TODO_COUNT=0
 
 log "Model sets: ${WANT[*]}"
+announce_auth
 [ "$SKIPPED" -gt 0 ] && log "  $SKIPPED file(s) already present and complete — skipping"
 if [ "$TODO_COUNT" -eq 0 ]; then
     log "Everything requested is already downloaded."
