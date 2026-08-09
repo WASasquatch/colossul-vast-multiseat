@@ -24,36 +24,109 @@
 # the nodes it supplies. Verify against a real run before trusting it fully -
 # the registry has collisions between forks.
 
+# Where a pack appears in BOTH the workflow analysis and the workstation export,
+# the WORKSTATION commit wins — that is the combination the artists have actually
+# been running, and matching it is the point of the export.
+#
 # --- video / animation core ------------------------------------------------
 https://github.com/kijai/ComfyUI-WanVideoWrapper@088128b224242e110d3906c6750e9a3a348a659b  # WanVideo*, MultiTalk*, Wav2Vec (19 nodes)
-https://github.com/kijai/ComfyUI-KJNodes@60cd6bc1870db94c6eeb05fbe455147a8e91c4e9  # ImageResizeKJv2, ColorMatch, GetImageSizeAndCount, INTConstant, SkipLayerGuidanceWanVideo
-https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite@4ee72c065db22c9d96c2427954dc69e7b908444b  # VHS_LoadVideo, VHS_VideoCombine, VHS_VideoInfo
+https://github.com/kijai/ComfyUI-KJNodes@e27a505b3ba6ce42687fe00500deda103d9d6071  # ImageResizeKJv2, ColorMatch, GetImageSizeAndCount, GetNode/SetNode  [workstation]
+https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite@8923bd836bdab8b7bbdf4ed104b7d045e70c66e2  # VHS_LoadVideo, VHS_VideoCombine, VHS_VideoInfo  [workstation]
 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation@26545cc2dd95bc3d27f056016300673bdeee78f5  # RIFE VFI, FILM VFI
 https://github.com/kijai/ComfyUI-MelBandRoFormer@92c86854e6654f4aacc97484471af95c98ea16d4  # MelBandRoFormerModelLoader/Sampler
 https://github.com/wallen0322/ComfyUI-Wan22FMLF@7140cd224396aff9fd909ab0041c3fbf81b92b0c  # WanFirstMiddleLastFrameToVideo
+https://github.com/kijai/ComfyUI-WanAnimatePreprocess@1a35b81a418bbba093356ad19b19bf2a76a24f4e  # Wan Animate pose/face preprocessing  [workstation]
 
 # --- preprocessing / masking ----------------------------------------------
-https://github.com/Fannovel16/comfyui_controlnet_aux@e8b689a513c3e6b63edc44066560ca5919c0576e  # AIO_Preprocessor, DWPreprocessor, DepthAnythingV2Preprocessor, BinaryPreprocessor
+https://github.com/Fannovel16/comfyui_controlnet_aux@12f35647f0d510e03b45a47fb420fe1245a575df  # AIO_Preprocessor, DWPreprocessor, DepthAnythingV2Preprocessor  [workstation]
 https://github.com/yuvraj108c/ComfyUI-Video-Depth-Anything@a0db08e63d1ea571601c45cde4aaee0acdd0544d  # LoadVideoDepthAnythingModel, VideoDepthAnything*
 https://github.com/lldacing/ComfyUI_BiRefNet_ll@5443a2aa16cfbd98bb2f7dcc8bdcb70439e08529  # RembgByBiRefNet, AutoDownloadBiRefNetModel
+https://github.com/hoveychen/ComfyUI-MusePose-Remaster@4459f5a4d61910dc2e8406293b291b4e1ae1c757  # MusePose pose-driven animation  [workstation]
 
 # --- utility ---------------------------------------------------------------
 https://github.com/yolain/ComfyUI-Easy-Use@595e0738a9e3f8d0d9c4d875461b2d2c9e7559c7  # easy forLoopStart/End, cleanGpuUsed, imageSwitch
 https://github.com/WASasquatch/was-node-suite-comfyui@ea935d1044ae5a26efa54ebeb18fe9020af49a45  # Image Blank, Image Resize, Image Filter Adjustments, Text Multiline
 https://github.com/WASasquatch/WAS_Extras@66667a380067b74cadb555e7e01f6b3827dc143e  # WASTiledImageUpscaleWithModel
-https://github.com/cubiq/ComfyUI_essentials@9d9f4bedfc9f0321c19faf71855e228c93bd0dc9  # ImageResize+
+https://github.com/cubiq/ComfyUI_essentials@9d9f4bedfc9f0321c19faf71855e228c93bd0dc9  # ImageResize+   (see essentials note below)
 https://github.com/pythongosssss/ComfyUI-Custom-Scripts@609f3afaa74b2f88ef9ce8d939626065e3247469  # MathExpression|pysssss
-https://github.com/jamesWalker55/comfyui-various@5bd85aaf7616878471469c4ec7e11bbd0cef3bf2  # JWImageSaturation, JWFloatToInteger, JWIntegerAdd
-https://github.com/chflame163/ComfyUI_LayerStyle@64f976fec8492ea4930c0e30c32369573189b23d  # LayerUtility: PurgeVRAM
+https://github.com/jamesWalker55/comfyui-various@5bd85aaf7616878471469c4ec7e11bbd0cef3bf2  # JWImageSaturation, JWFloatToInteger, JWIntegerAdd  [also workstation, same commit]
+https://github.com/chflame163/ComfyUI_LayerStyle@4f4d5cbbe40e030a5a0bb474fb65c4032585bc3c  # LayerUtility: PurgeVRAM, DrawRoundedRectangle  [workstation]
 https://github.com/ssitu/ComfyUI_UltimateSDUpscale@a5547db9e1d07d3318bb21e9e9c474f4c1e9c8df  # UltimateSDUpscaleNoUpscale
-https://github.com/ltdrdata/ComfyUI-Impact-Pack@429d0159ad429e64d2b3916e6e7be9c22d025c3c  # ImageListToImageBatch
+https://github.com/ltdrdata/ComfyUI-Impact-Pack@61bd8397a18e7e7668e6a24e95168967768c2bed  # ImageListToImageBatch, detailers  [workstation]
 https://github.com/PGCRT/CRT-Nodes@381100074c165cd44d3fb3137a9035ced61f9a1b  # CRTFirstLastFrameSelector
 
-# ── Unverified — enable after confirming which pack really owns these ───────
-# Several node names are claimed by multiple repos in the registry. These were
-# ambiguous, so they are OFF by default rather than silently pulling a fork:
+
+# ── From the workstation export ─────────────────────────────────────────────
+# Packs the artists have installed locally that the workflow analysis did not
+# surface. Pinned to the exact commits the workstations are running.
 #
-# GetNode / SetNode              -> KJNodes provides these; already covered above
-# ImageScaleToMaxDimension       -> unresolved; check which pack your artists used
+# --- workflow authoring / QoL ----------------------------------------------
+https://github.com/rgthree/rgthree-comfy@eadc24ecc8bfc3c80fcc50724c0ebe74489f255b  # reroute, bookmarks, power lora loader
+https://github.com/ClownsharkBatwing/RES4LYF@0dc91c00c4c3fb38e7874fcd7a2a327765e8882c  # advanced samplers/schedulers
+https://github.com/shiimizu/ComfyUI-TiledDiffusion@a155b1bac39147381aeaa52b9be42e545626a44f  # tiled diffusion / VAE for large canvases
+https://github.com/WhatDreamsCost/WhatDreamsCost-ComfyUI@bf7110434fe9abc06f039090b9de116720325c5e
+https://github.com/WASasquatch/wasabi@d1e497f749bbce9fca9ce69d3c0587f5cb544aeb  # WASABI
+
+# --- IO / assets -----------------------------------------------------------
+https://github.com/giriss/comfy-image-saver@65e6903eff274a50f8b5cd768f0f96baf37baea1  # save with metadata + filename placeholders
+https://github.com/DemonGatanjieu/Anomalous_Model_Browser@bb530c47bbec7fc8e561d5bf4c2a86860d4903dc  # in-UI model browser
+https://github.com/gignit/comfyui_model_installer@00645133270e9b83e6ffbf488acf303768bd0e65  # in-UI model installer
+https://github.com/eric183/ComfyUI-Only@4a642df91603a66e30bcfd091c5b4fb9d3f8aa3f  # archive loader
+https://github.com/un-seen/comfyui-tensorops@d34488e3079ecd10db2fe867c3a7af568115faed  # tensor utilities
+
+# --- hardware --------------------------------------------------------------
+# RTX/TensorRT-specific. Harmless on other cards — its nodes simply will not be
+# useful — but note that Vast hosts vary, so do not build a workflow around it
+# unless you always rent the same GPU.
+https://github.com/Comfy-Org/Nvidia_RTX_Nodes_ComfyUI@892515e3eb9a4920a131a502a047e47adca9eb0d
+
+
+# ── Deliberately NOT installed, from the same export ────────────────────────
+#
+# ComfyUI-Manager
+#     Comfy-Org/ComfyUI-Manager. We use the BUILT-IN manager (a pip package)
+#     via --enable-manager. ComfyUI's handle_comfyui_manager_unavailable()
+#     force-disables that flag when custom_nodes/ComfyUI-Manager exists, so
+#     adding this here would silently turn the Manager off for every seat.
+#     Provisioning actively retires the copy the base image ships.
+#
+# Colossul_Studios_Nodes
+#     git@github.com:WASasquatch/Colossul_Studios_Nodes.git — private (the API
+#     404s), and an SSH remote the instance has no key for. Not needed here: it
+#     is vendored inside storyrendr-services, and install-custom-nodes.sh copies
+#     it from the checkout provisioning has already authenticated and fetched.
+#     NOTE: it was "Dirty": true on the workstation — uncommitted local changes
+#     there will NOT appear remotely. Commit them if they matter.
+#
+# ComfyUI-WanVideoKsampler
+#     Exported as "ComfyUI-WanVideoKsampler.was.disabled" — the suffix means it
+#     is switched off on the workstation, so it is off here too. Uncomment if
+#     that was accidental.
+#     https://github.com/ShmuelRonen/ComfyUI-WanVideoKsampler@e92a703670b6d2ed0748f3c25ae551e7e05d0ea8
+#
+# comfyui-last-frame-extractor
+#     https://github.com/Charonartist/comfyui-last-frame-extractor — GONE. 404s
+#     under both casings while the owner account still exists, so the repo was
+#     deleted or made private after it was installed. Nothing to clone. It was
+#     also "Dirty": true locally. If the artists need it, push a copy to a repo
+#     you control and add that URL — otherwise it exists ONLY on that machine.
+#
+# comfyorg/comfyui-essentials
+#     A FORK of cubiq/ComfyUI_essentials, which is already installed above.
+#     The fork's last push predates upstream's, so it is behind. Installing both
+#     would put the same nodes in two directories (comfyui-essentials and
+#     ComfyUI_essentials) and register every node twice. Upstream is used here.
+#     It was "Dirty": true locally too. Swap the line above if the artists
+#     depend on something fork-specific.
+
+# ── Still unattributed node types ───────────────────────────────────────────
+# These appear in the workflows but no pack in the registry clearly owns them.
+# The workstation export did not resolve them either — none of the packs it adds
+# is an obvious source — so a workflow using them will still show a red node.
+# Ask the artist who authored that workflow which pack it came from.
+#
+# ImageScaleToMaxDimension       -> unresolved
 # ImageResizeMax                 -> unresolved
 # ComfySwitchNode                -> unresolved
+#
+# GetNode / SetNode              -> RESOLVED: KJNodes, installed above.
