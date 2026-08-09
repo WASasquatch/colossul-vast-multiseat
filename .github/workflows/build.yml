@@ -17,12 +17,13 @@ on:
         required: false
         default: "vastai/comfy:v0.30.0-cuda-13.2-py312"
 
-# Two pushes in quick succession would otherwise race to publish :latest, and
-# nothing guarantees the newer build finishes last. Supersede instead: cancel
-# the in-flight run so :latest always reflects the most recent commit.
+# Serialise runs so two pushes can't race to publish :latest with no guarantee
+# about which finishes last. Queue rather than cancel: cancelling killed a run
+# that had already pushed all three tags and was merely exporting its build
+# cache, which then reported a successful publish as a failed build.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -30,8 +31,44 @@ env:
   DEFAULT_BASE: "vastai/comfy:v0.30.0-cuda-13.2-py312"
 
 jobs:
+  # Does this commit change anything the IMAGE contains? Docs and tests don't,
+  # so rebuilding for them wastes ~20 minutes of runner time and — worse —
+  # a later docs push cancels an in-flight image build via the concurrency
+  # rule above, which is how a successful publish ended up reported as a
+  # failed run.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          set -euo pipefail
+          # Anything other than a plain push (tag, manual, PR) always builds.
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "image=true" >> "$GITHUB_OUTPUT"; echo "reason: event is ${{ github.event_name }}"; exit 0
+          fi
+          before="${{ github.event.before }}"
+          # All-zeros means a new branch with no comparable parent.
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$before^{commit}" 2>/dev/null; then
+            echo "image=true" >> "$GITHUB_OUTPUT"; echo "reason: no usable base commit"; exit 0
+          fi
+          changed="$(git diff --name-only "$before" "${{ github.sha }}")"
+          echo "changed files:"; echo "$changed" | sed 's/^/  /'
+          # Paths that actually end up in, or define, the image.
+          if echo "$changed" | grep -qE '^(Dockerfile|scripts/|supervisor/|\.dockerignore|\.github/workflows/)'; then
+            echo "image=true" >> "$GITHUB_OUTPUT"; echo "-> image inputs changed, building"
+          else
+            echo "image=false" >> "$GITHUB_OUTPUT"; echo "-> docs/tests only, skipping the image build"
+          fi
+
   # Fast feedback: the topology and argument checks need no Docker and no
-  # private source, so they gate the expensive build.
+  # private source, so they gate the expensive build. Always runs — the docs
+  # carry port lists that these tests validate.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -63,10 +100,11 @@ jobs:
           done
 
   build:
-    needs: test
+    needs: [changes, test]
     runs-on: ubuntu-latest
-    # Don't publish from forks/PRs — they can't have registry write anyway.
-    if: github.event_name != 'pull_request'
+    # Don't publish from forks/PRs — they can't have registry write anyway —
+    # and don't rebuild an identical image for a docs-only commit.
+    if: github.event_name != 'pull_request' && needs.changes.outputs.image == 'true'
     permissions:
       contents: read
       packages: write
@@ -132,10 +170,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BASE_IMAGE=${{ github.event.inputs.base_image || matrix.base }}
-          # Scope the cache per variant, or the two matrix legs would evict
-          # each other's layers on every run.
-          cache-from: type=gha,scope=${{ matrix.base }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.base }}
+          # No GitHub Actions cache. Build time here is dominated by pulling a
+          # ~7.5 GB base that no GHA cache can help with, while `mode=max`
+          # exported thousands of layers into a 10 GB repo-wide cache — slow
+          # enough that it was still running after the image had published, and
+          # far too large to survive two matrix legs. Our own layers (apt +
+          # COPY) rebuild in about a minute.
 
       - name: Summary
         run: |
