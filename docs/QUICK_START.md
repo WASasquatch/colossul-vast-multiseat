@@ -74,6 +74,16 @@ This keeps the key encrypted on Vast and out of the template.
 > encrypted. Vast's own docs warn: *"Never put sensitive information (passwords,
 > API keys) in template environment variables."*
 
+> ⚠️ **Vast has TWO different places called "Environment Variables", and they
+> are not interchangeable.**
+>
+> - **This one** (account settings) feeds the software *inside* the server.
+>   Only `GITHUB_TOKEN` goes here.
+> - **The template's** Docker Options (Step 3) feeds *Vast's website* — the
+>   Open button, port mappings. `OPEN_BUTTON_PORT` **only works there**;
+>   putting it here does nothing, and the instance will say *"running but has
+>   no web interface"*.
+
 ### Step 3: Create the template
 
 A "template" is a saved recipe telling Vast what to run. You make it once and
@@ -317,6 +327,12 @@ and download.
 Open button.**
 
 The server is running fine — Vast just doesn't know which page to open.
+
+**The #1 cause: `OPEN_BUTTON_PORT` was added to the wrong "Environment
+Variables".** Vast has two sections with that name. The one in your **account
+settings** (where the `GITHUB_TOKEN` goes) does *not* control the button —
+only the **template's Docker Options** does. If you added it under your
+account, that's why: move it into the template as shown in Step 3.
 
 **Check what the instance actually received:** on the instance card, open the
 **Environment** tab. If `OPEN_BUTTON_PORT` is not in that list, this instance

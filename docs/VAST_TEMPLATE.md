@@ -163,6 +163,11 @@ loopback. To expose their FastAPI `/docs` too, regenerate with
 >   card's **Environment** tab that `OPEN_BUTTON_PORT` is actually present. If
 >   it isn't, the instance was created from a template copy that lacks it;
 >   editing a template never updates an existing instance.
+> - **Account-level Environment Variables (Account → Settings) do NOT work for
+>   this.** Those are injected into the container's environment — right for
+>   `GITHUB_TOKEN`, invisible to the console's button logic. Confirmed
+>   empirically: an instance created with `OPEN_BUTTON_PORT` set only at the
+>   account level still reports "no web interface".
 
 A fine-grained token scoped to that single repository is sufficient:
 
