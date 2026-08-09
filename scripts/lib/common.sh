@@ -271,7 +271,10 @@ portal_log() {
 # own volume. Wired in with extra_model_paths.yaml rather than by moving
 # ComfyUI's own models/ dir, so anything already there (the base image symlinks
 # SD1.5 into it) keeps resolving.
-ASSETS_ROOT="${COLOSSUL_ASSETS_ROOT:-$WORKSPACE/ComfyUI_Assets}"
+#
+# ASSETS_ROOT itself is set by colossul_init_paths(), so it re-derives after the
+# vast environment loads; assigning it again here would freeze the default and
+# silently ignore a COLOSSUL_ASSETS_ROOT set in the template.
 
 # Canonical folder map for ComfyUI v0.30, from folder_names_and_paths. Keys with
 # two directories carry a legacy alias that older workflows still reference:
@@ -406,8 +409,11 @@ tunnel_map() {
 # host-side mapping as VAST_TCP_PORT_<external>, so prefer the Cloudflare tunnel
 # and fall back to the direct address.
 external_url() {
-    local ext="$1" map="${2:-}" tunnel var hostport
-    tunnel="$(printf '%s\n' "$map" | awk -v p="$ext" -F'\t' '$1==p {print $2; exit}')"
+    # Named tmap, not map: `map` is the array inside gpu_for_seat, and reusing
+    # the name is the string/array confusion that once produced a stray empty
+    # argument in sanitize_comfyui_args.
+    local ext="$1" tmap="${2:-}" tunnel var hostport
+    tunnel="$(printf '%s\n' "$tmap" | awk -v p="$ext" -F'\t' '$1==p {print $2; exit}')"
     if [ -n "$tunnel" ]; then printf '%s' "$tunnel"; return 0; fi
     var="VAST_TCP_PORT_${ext}"
     hostport="${!var:-}"
@@ -432,8 +438,8 @@ wait_for_seats() {
 }
 
 print_access_summary() {
-    local n="$1" map i gpu pw
-    map="$(tunnel_map)"
+    local n="$1" tmap i gpu pw
+    tmap="$(tunnel_map)"
     # WEB_PASSWORD when the operator set one, else the generated token.
     pw="${WEB_PASSWORD:-${OPEN_BUTTON_TOKEN:-<see the 'Your web credentials' line above>}}"
 
@@ -447,18 +453,18 @@ print_access_summary() {
     echo "      password:  $pw"
     echo ""
     echo "  INSTANCE PORTAL (all seats listed here)"
-    echo "      $(external_url 1111 "$map")"
+    echo "      $(external_url 1111 "$tmap")"
     echo ""
     echo "  GIVE ONE LINK TO EACH ARTIST"
     printf '      %-5s %-4s %s\n' "SEAT" "GPU" "STORYRENDR"
     for ((i = 0; i < n; i++)); do
         gpu="$(gpu_for_seat "$i")"
-        printf '      %-5s %-4s %s\n' "$i" "$gpu" "$(external_url "$(frontend_ext "$i")" "$map")"
+        printf '      %-5s %-4s %s\n' "$i" "$gpu" "$(external_url "$(frontend_ext "$i")" "$tmap")"
     done
     echo ""
     echo "  ComfyUI directly (optional, for advanced use)"
     for ((i = 0; i < n; i++)); do
-        printf '      seat %-2s %s\n' "$i" "$(external_url "$(comfyui_ext "$i")" "$map")"
+        printf '      seat %-2s %s\n' "$i" "$(external_url "$(comfyui_ext "$i")" "$tmap")"
     done
     echo ""
     echo "  NOTES"
