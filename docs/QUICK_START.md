@@ -118,11 +118,17 @@ went on your account in Step 2):
 
 | Key | Value |
 |---|---|
+| `OPEN_BUTTON_PORT` | `1111` |
 | `WEB_PASSWORD` | a password you choose |
 
-> This becomes the password for every seat and for the file manager. Without it
-> the system generates a random one that is genuinely awkward to look up. The
-> username is always `vastai`.
+> **`OPEN_BUTTON_PORT` is what makes the blue "Open" button appear.** Leave it
+> out and your server will run perfectly but Vast will say *"Instance is running
+> but has no web interface"*, with no obvious way in. It must be set here, on
+> the template.
+>
+> `WEB_PASSWORD` becomes the password for every seat and for the file manager.
+> Without it the system generates a random one that is genuinely awkward to look
+> up. The username is always `vastai`.
 
 4. Click **Create**.
 
@@ -288,16 +294,31 @@ and download.
 **It says "Instance is running but has no web interface" and there's no
 Open button.**
 
-The server is running fine — Vast just doesn't know which page to open. This
-happens on instances created from an older version of our image.
+The server is running fine — Vast just doesn't know which page to open.
 
-**Destroying and renting again is often not enough**, because the machine can
-still be holding its own old copy of `latest`. Do this instead:
+**Almost always this means `OPEN_BUTTON_PORT` is missing from your template.**
+Add it (Step 3):
 
-1. Edit your template's **Image Path:Tag** to the exact version you were given,
-   e.g. `ghcr.io/wasasquatch/colossul-vast-multiseat:sha-c833194`.
-2. Destroy the instance and rent again — ideally on a **different machine**
-   (check the IP address differs from the last one).
+| Key | Value |
+|---|---|
+| `OPEN_BUTTON_PORT` | `1111` |
+
+It has to be on the *template*; the setting can't come from the software itself.
+Existing instances won't pick it up — save the template, then destroy and rent
+again.
+
+**You don't have to wait for that to get in.** Click the **LOG** button and look
+near the end for lines like:
+
+```
+Default Tunnel started for Instance Portal (http://localhost:1111)
+  - https://lesser-chocolate-moves-aircraft.trycloudflare.com
+* Your web credentials are: vastai / 6618bbe7...
+```
+
+That first link **is** the portal — open it and log in with those credentials,
+and you'll get the same page the Open button would have shown, with every seat
+listed.
 
 To rescue the one you have:
 1. Click the **⇄** (IP & Port Info) button on the instance card.

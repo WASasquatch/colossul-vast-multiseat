@@ -138,6 +138,15 @@ loopback. To expose their FastAPI `/docs` too, regenerate with
 | Variable | Value |
 |---|---|
 | `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrendr-services` — request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
+| `OPEN_BUTTON_PORT` | `1111` |
+
+> **`OPEN_BUTTON_PORT` must be set *here*, on the template.** The image also sets
+> it, but that only reaches the container — Vast's console decides whether to
+> show the **Open** button from the *template's* stored configuration and never
+> inspects the image's ENV. Omit it and the instance runs perfectly while the
+> console reports "Instance is running but has no web interface". Per Vast's
+> docs it "maps the open button to whatever external port maps to the specified
+> internal port"; `1111` is the Instance Portal, which links out to every seat.
 
 A fine-grained token scoped to that single repository is sufficient:
 

@@ -50,11 +50,12 @@ ENV NUM_SEATS=4 \
     STORYRENDR_REPO=https://github.com/WASasquatch/storyrendr-services.git \
     STORYRENDR_REF=main
 
-# Which port Vast's "Open" button targets. Without it the console reports
-# "Instance is running but has no web interface" and offers no way in — the
-# base image doesn't set it, and neither does vastai/comfy, because their own
-# templates supply it. 1111 is the Instance Portal, which then links out to
-# every seat.
+# The base image's supervisor scripts want OPEN_BUTTON_PORT present in the
+# container, so set it here — but note this is NOT what makes the console's
+# "Open" button appear. Vast decides that from the *template's* stored
+# environment and never inspects the image's ENV, so the template must set
+# OPEN_BUTTON_PORT=1111 as well or the console reports "Instance is running but
+# has no web interface". See docs/VAST_TEMPLATE.md.
 ENV OPEN_BUTTON_PORT=1111
 
 # Instance Portal entries for the default 4 seats. Regenerate with
