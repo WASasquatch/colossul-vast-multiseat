@@ -71,4 +71,37 @@ done
 echo "PASS: 6 malformed payloads produce no output and no error"
 
 echo ""
+echo "=== 6. the access summary an operator actually reads ==="
+# Printed last at boot and by `colossul-seats urls`. If it is wrong or crashes,
+# the operator has no assembled way to hand out links.
+tunnel_map() { printf '1111\thttps://portal.trycloudflare.com\n8190\thttps://seat0.trycloudflare.com\n'; }
+export PUBLIC_IPADDR=203.0.113.10 VAST_TCP_PORT_8200=40001
+export OPEN_BUTTON_TOKEN=tok_generated_value
+
+out="$(print_access_summary 2)" || fail "print_access_summary exited non-zero"
+grep -q 'username:  vastai'        <<< "$out" || fail "username missing"
+grep -q 'tok_generated_value'      <<< "$out" || fail "password missing"
+grep -q 'https://portal.trycloudflare.com' <<< "$out" || fail "portal URL missing"
+grep -q 'https://seat0.trycloudflare.com'  <<< "$out" || fail "seat 0 should use its tunnel"
+grep -q 'https://203.0.113.10:40001'       <<< "$out" || fail "seat 1 should fall back to the direct address"
+grep -q "$ASSETS_ROOT/models"      <<< "$out" || fail "model store path missing"
+grep -q '?token='                  <<< "$out" || fail "the prompt-skipping tip should be included"
+echo "  tunnel where available, direct address otherwise, credentials present"
+
+# An operator-set password must win over the generated token.
+export WEB_PASSWORD='chosen-password'
+out="$(print_access_summary 1)"
+grep -q 'password:  chosen-password' <<< "$out" || fail "WEB_PASSWORD should take precedence"
+grep -q 'tok_generated_value'        <<< "$out" && fail "the generated token should not appear once WEB_PASSWORD is set"
+echo "  WEB_PASSWORD overrides the generated token"
+
+# Worst case: no tunnels, no public address. Must still print, not crash.
+tunnel_map() { :; }
+unset PUBLIC_IPADDR VAST_TCP_PORT_8200
+out="$(print_access_summary 2)" || fail "summary crashed with no tunnels and no public IP"
+grep -q 'see IP & Port Info' <<< "$out" || fail "should degrade to an actionable placeholder"
+echo "  degrades to a placeholder rather than an empty or broken URL"
+echo "PASS: access summary is correct and never leaves the operator stranded"
+
+echo ""
 echo "ALL TUNNEL CHECKS PASSED"

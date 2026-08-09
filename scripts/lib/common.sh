@@ -396,6 +396,82 @@ tunnel_map() {
     printf '%s' "$json" | parse_tunnel_json
 }
 
+# ── Access summary ───────────────────────────────────────────────────────────
+# Everything an operator needs, in one block, printed last. The credentials and
+# tunnel URLs do exist in the boot log already, but scattered across hundreds of
+# lines of pip output and cloudflared chatter - which is not usable when someone
+# just wants to hand four links to four artists.
+
+# The instance's public address for a given EXTERNAL port. Vast publishes the
+# host-side mapping as VAST_TCP_PORT_<external>, so prefer the Cloudflare tunnel
+# and fall back to the direct address.
+external_url() {
+    local ext="$1" map="${2:-}" tunnel var hostport
+    tunnel="$(printf '%s\n' "$map" | awk -v p="$ext" -F'\t' '$1==p {print $2; exit}')"
+    if [ -n "$tunnel" ]; then printf '%s' "$tunnel"; return 0; fi
+    var="VAST_TCP_PORT_${ext}"
+    hostport="${!var:-}"
+    if [ -n "${PUBLIC_IPADDR:-}" ] && [ -n "$hostport" ]; then
+        printf 'https://%s:%s' "$PUBLIC_IPADDR" "$hostport"
+    else
+        printf '<port %s - see IP & Port Info>' "$ext"
+    fi
+}
+
+# Wait for the seat programs to reach RUNNING, so the summary reflects reality
+# rather than intent. Bounded: a stuck seat must not hold the summary hostage.
+wait_for_seats() {
+    local n="$1" timeout="${2:-120}" waited=0 want got
+    want=$(( n * 3 ))
+    while [ "$waited" -lt "$timeout" ]; do
+        got=$(supervisorctl status 'seat*:*' 2>/dev/null | grep -c RUNNING || true)
+        [ "${got:-0}" -ge "$want" ] && return 0
+        sleep 5; waited=$(( waited + 5 ))
+    done
+    return 1
+}
+
+print_access_summary() {
+    local n="$1" map i gpu pw
+    map="$(tunnel_map)"
+    # WEB_PASSWORD when the operator set one, else the generated token.
+    pw="${WEB_PASSWORD:-${OPEN_BUTTON_TOKEN:-<see the 'Your web credentials' line above>}}"
+
+    echo ""
+    echo "=================================================================="
+    echo "  COLOSSUL MULTI-SEAT — READY"
+    echo "=================================================================="
+    echo ""
+    echo "  LOG IN WITH"
+    echo "      username:  vastai"
+    echo "      password:  $pw"
+    echo ""
+    echo "  INSTANCE PORTAL (all seats listed here)"
+    echo "      $(external_url 1111 "$map")"
+    echo ""
+    echo "  GIVE ONE LINK TO EACH ARTIST"
+    printf '      %-5s %-4s %s\n' "SEAT" "GPU" "STORYRENDR"
+    for ((i = 0; i < n; i++)); do
+        gpu="$(gpu_for_seat "$i")"
+        printf '      %-5s %-4s %s\n' "$i" "$gpu" "$(external_url "$(frontend_ext "$i")" "$map")"
+    done
+    echo ""
+    echo "  ComfyUI directly (optional, for advanced use)"
+    for ((i = 0; i < n; i++)); do
+        printf '      seat %-2s %s\n' "$i" "$(external_url "$(comfyui_ext "$i")" "$map")"
+    done
+    echo ""
+    echo "  NOTES"
+    echo "      - A login prompt is expected. To skip it, append to any URL:"
+    echo "            ?token=$pw"
+    echo "      - Every seat shares this one password. Do not post links publicly."
+    echo "      - Put model weights in: ${ASSETS_ROOT}/models  (shared by all seats)"
+    echo "      - Admin:  colossul-seats status | urls | logs <n> | restart <n>"
+    echo ""
+    echo "=================================================================="
+    echo ""
+}
+
 # ── Supervisor units ─────────────────────────────────────────────────────────
 # Emit one seat's three programs plus a group, so an operator can recycle a
 # single employee's stack (`supervisorctl restart seat2:`). Lives here rather

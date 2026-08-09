@@ -374,14 +374,25 @@ fi
 # 9. Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-log "=============================================="
-log " Provisioning complete — $SEAT_COUNT seat(s) starting"
-log "=============================================="
-for ((i = 0; i < SEAT_COUNT; i++)); do
-    log "  Seat $i  GPU $(gpu_for_seat "$i")  Storyrendr :$(frontend_ext "$i")   ComfyUI :$(comfyui_ext "$i")"
+log "Provisioning complete — waiting for $SEAT_COUNT seat(s) to come up..."
+
+# Wait for the seats, and give Cloudflare a moment to hand out tunnel URLs, so
+# the summary below reports what is actually true. Both are bounded: a stuck
+# seat or a rate-limited tunnel must not stop the operator getting their links.
+if wait_for_seats "$SEAT_COUNT" 150; then
+    log "All seats are running."
+else
+    warn "Not every seat reached RUNNING in time — the summary may be incomplete."
+    warn "Check with: colossul-seats status    (and: colossul-seats logs <n>)"
+fi
+
+# Tunnels are created asynchronously after each portal entry appears.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -n "$(tunnel_map)" ] && break
+    sleep 5
 done
-echo ""
-log "Open the Instance Portal and use the per-seat links, or run: colossul-seats urls"
-log "Shared model store (put weights here): $ASSETS_ROOT/models"
-log "  every seat reads it, so a checkpoint is stored once regardless of seat count"
-echo ""
+
+supervisorctl status 'seat*:*' 2>/dev/null | sed 's/^/[colossul]   /' || true
+
+# LAST thing in the log, deliberately: everything needed to start work.
+print_access_summary "$SEAT_COUNT"

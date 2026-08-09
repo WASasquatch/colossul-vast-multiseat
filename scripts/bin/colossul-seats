@@ -48,46 +48,9 @@ cmd_status() {
     done
 }
 
-cmd_urls() {
-    local host i map tunnel
-    host="$(public_host)"
-    map="$(tunnel_map)"
-
-    echo ""
-    echo "  Hand each employee ONE link — the Storyrendr URL is all they need."
-    echo "  Every seat shares the instance credential (user 'vastai', password"
-    echo "  \$OPEN_BUTTON_TOKEN / \$WEB_PASSWORD), and portal links embed an access"
-    echo "  token — so a shared link is a shared seat."
-    echo ""
-
-    if [ -n "$map" ]; then
-        printf "  %-5s %-4s %s\n" "SEAT" "GPU" "STORYRENDR (public tunnel)"
-        for ((i = 0; i < SEAT_COUNT; i++)); do
-            tunnel="$(printf '%s\n' "$map" | awk -v p="$(frontend_ext "$i")" -F'\t' '$1==p {print $2; exit}')"
-            printf "  %-5s %-4s %s\n" "$i" "$(gpu_for_seat "$i")" \
-                "${tunnel:-<no tunnel yet - check the Instance Portal>}"
-        done
-        echo ""
-        echo "  Direct (needs the port open in the template):"
-    else
-        echo "  (tunnel_manager unreachable — showing direct addresses only)"
-        echo ""
-    fi
-
-    printf "  %-5s %-4s %-34s %s\n" "SEAT" "GPU" "STORYRENDR" "COMFYUI"
-    for ((i = 0; i < SEAT_COUNT; i++)); do
-        printf "  %-5s %-4s %-34s %s\n" \
-            "$i" "$(gpu_for_seat "$i")" \
-            "https://${host}:$(frontend_ext "$i")" \
-            "https://${host}:$(comfyui_ext "$i")"
-    done
-    echo ""
-    if [ "$host" = "<instance-host>" ]; then
-        echo "  Note: the instance address wasn't in the environment. Use the tunnel"
-        echo "        URLs above, or the address on your Vast instance card."
-        echo ""
-    fi
-}
+# Same block provisioning prints at the end of boot - one implementation, so
+# what an operator reads later always matches what they saw then.
+cmd_urls() { print_access_summary "$SEAT_COUNT"; }
 
 cmd_logs() {
     local seat="${1:-}"
