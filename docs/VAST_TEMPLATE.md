@@ -137,7 +137,7 @@ loopback. To expose their FastAPI `/docs` too, regenerate with
 
 | Variable | Value |
 |---|---|
-| `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrender-services` — request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
+| `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrendr-services` — request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
 
 A fine-grained token scoped to that single repository is sufficient:
 
@@ -347,7 +347,7 @@ The file exists on a developer's machine but was never committed — a
 depth**, so `lib/` silently excludes `colossul-frontend/src/lib/`, and every
 fresh clone gets a broken build while working copies stay fine.
 
-Diagnose in `storyrender-services`:
+Diagnose in `storyrendr-services`:
 
 ```bash
 git check-ignore -v colossul-frontend/src/lib/output-utils.ts

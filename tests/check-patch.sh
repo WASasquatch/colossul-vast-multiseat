@@ -24,7 +24,7 @@ PY="${PYTHON:-python3}"
 command -v "$PY" >/dev/null 2>&1 || { echo "python3 not found; set PYTHON="; exit 1; }
 
 if [ ! -f "$CONFIG" ]; then
-    # storyrender-services is private, so CI and fresh clones won't have it.
+    # storyrendr-services is private, so CI and fresh clones won't have it.
     # Skip rather than fail there, but never skip a path someone asked for
     # explicitly - that's a typo they need to hear about.
     if [ "$EXPLICIT" = "1" ]; then

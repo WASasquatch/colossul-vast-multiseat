@@ -371,15 +371,15 @@ admin — it's one command (`colossul-seats restart 2`).
 
 ## For WASasquatch / Colossul: issuing the access key
 
-Only someone with access to the private `storyrender-services` repository can
+Only someone with access to the private `storyrendr-services` repository can
 create this. The `GITHUB_TOKEN` in Step 2 is a GitHub **fine-grained personal
 access token**.
 
 1. [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
 2. **Resource owner** → your own account (the repo lives at
-   `WASasquatch/storyrender-services`).
+   `WASasquatch/storyrendr-services`).
 3. **Expiration** → 90 days is reasonable.
-4. **Repository access** → *Only select repositories* → `storyrender-services`.
+4. **Repository access** → *Only select repositories* → `storyrendr-services`.
 5. **Permissions** → *Repository permissions*:
 
 | Permission | Access | Why |

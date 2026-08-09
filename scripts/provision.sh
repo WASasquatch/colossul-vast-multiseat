@@ -34,7 +34,7 @@ load_vast_environment
 wait_for_provisioning "Colossul provisioning"
 
 SEAT_COUNT="$(num_seats)"
-STORYRENDR_REPO="${STORYRENDR_REPO:-https://github.com/WASasquatch/storyrender-services.git}"
+STORYRENDR_REPO="${STORYRENDR_REPO:-https://github.com/WASasquatch/storyrendr-services.git}"
 STORYRENDR_REF="${STORYRENDR_REF:-main}"
 STAMP_FILE="$COLOSSUL_ROOT/.provision-stamp"
 
@@ -141,7 +141,7 @@ if [ -d "$SRC_DIR/.git" ]; then
     fi
 else
     if [ -z "${GITHUB_TOKEN:-}" ]; then
-        die "storyrender-services is a private repository and no GITHUB_TOKEN was provided.
+        die "storyrendr-services is a private repository and no GITHUB_TOKEN was provided.
        Add GITHUB_TOKEN=<a PAT with repo:read> to the Vast template environment and restart."
     fi
     log "Cloning $STORYRENDR_REPO @ $STORYRENDR_REF ..."
@@ -250,7 +250,7 @@ if [ "$NEED_BUILD" = "1" ]; then
             grep -o "Cannot find module '@/[^']*'" "$BUILD_LOG" | sort -u | sed 's/^/       /' >&2
             warn ""
             warn "These files most likely exist on a developer's machine but were never"
-            warn "committed - a .gitignore rule is hiding them. In storyrender-services:"
+            warn "committed - a .gitignore rule is hiding them. In storyrendr-services:"
             warn "       git check-ignore -v colossul-frontend/src/lib/output-utils.ts"
             warn "A bare 'lib/' or 'build/' rule matches directories at ANY depth."
             warn "Fix: anchor the rule ('/lib/'), 'git add -f' the missing files, push,"

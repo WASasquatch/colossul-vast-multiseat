@@ -47,7 +47,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV NUM_SEATS=4 \
     COLOSSUL_ETC=/etc/colossul \
     COLOSSUL_LIB=/opt/colossul \
-    STORYRENDR_REPO=https://github.com/WASasquatch/storyrender-services.git \
+    STORYRENDR_REPO=https://github.com/WASasquatch/storyrendr-services.git \
     STORYRENDR_REF=main
 
 # Which port Vast's "Open" button targets. Without it the console reports

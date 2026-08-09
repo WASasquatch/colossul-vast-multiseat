@@ -213,7 +213,7 @@ Full field list in [docs/VAST_TEMPLATE.md](docs/VAST_TEMPLATE.md). The essential
 |---|---|
 | Image | `ghcr.io/wasasquatch/colossul-vast-multiseat:latest` |
 | Ports | `1111,8080,8190,8191,8200,8201,8210,8211,8220,8221` |
-| Env | `GITHUB_TOKEN=<fine-grained PAT, Contents:Read on storyrender-services>` |
+| Env | `GITHUB_TOKEN=<fine-grained PAT, Contents:Read on storyrendr-services>` |
 | Disk | 150 GB+ |
 | Launch mode | **`Docker ENTRYPOINT`** — the other modes replace the entrypoint and nothing starts |
 
@@ -403,12 +403,12 @@ itself is **private** and is not redistributed here.
 **Nothing in this repo or image grants access to the private repo.** No token,
 key, or source is baked in at build time — the image is built entirely from
 public bases and the scripts in this repo. The only reference to
-`storyrender-services` is its URL, which returns 404 to anyone without access.
+`storyrendr-services` is its URL, which returns 404 to anyone without access.
 
 Access is supplied at *runtime*, by the operator, as a `GITHUB_TOKEN` in their
 own Vast template. Recommended handling:
 
-- Use a **fine-grained PAT** scoped to `storyrender-services` alone, with
+- Use a **fine-grained PAT** scoped to `storyrendr-services` alone, with
   **Contents: Read-only** — the only permission you select. GitHub adds
   **Metadata: Read-only** automatically and won't let you remove it. Nothing
   else is needed: provisioning clones and fetches, never pushes.
@@ -436,7 +436,7 @@ endpoint from the environment but hardcodes the `/api` proxy to
 otherwise proxy to seat 0 and employees would silently share one database.
 `scripts/patches/patch_vite_backend_url.py` rewrites it at provision time and
 refuses to apply if upstream changes shape. Adding `VITE_BACKEND_URL` support
-to storyrender-services would let this patch be deleted.
+to storyrendr-services would let this patch be deleted.
 
 **No isolation between seats.** Per the deployment brief, all seats sit behind
 the instance's single Vast token. Employees are handed distinct URLs but can

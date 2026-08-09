@@ -13,7 +13,7 @@ fails loudly rather than silently no-op'ing if upstream changes shape, so a
 broken assumption surfaces at provision time instead of as four employees
 overwriting each other's work.
 
-The right long-term home for this is upstream in storyrender-services; this
+The right long-term home for this is upstream in storyrendr-services; this
 patch exists so the image doesn't require a coordinated release to work.
 
 Usage: patch_vite_backend_url.py <path-to-vite.config.ts>
