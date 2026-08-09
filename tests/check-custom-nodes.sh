@@ -125,6 +125,7 @@ chmod +x "$T/fake-uv"
     export CUSTOM_NODES="$T/pack" SKIP_MANIFEST=1
     # Pull in just the function, without running the installer body.
     eval "$(awk '/^install_reqs\(\)/,/^}/' "$ROOT/scripts/install-custom-nodes.sh")"
+    # shellcheck disable=SC2034  # read by the eval'd install_reqs above
     FAILED=()
     install_reqs "$T/pack/MyPack" MyPack
 ) >/dev/null 2>&1

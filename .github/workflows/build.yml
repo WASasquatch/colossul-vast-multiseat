@@ -81,9 +81,9 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           shellcheck --version
+          # Globbed, not listed: a hardcoded list silently skips new scripts.
           shellcheck -x -S warning \
-            scripts/provision.sh scripts/seat-*.sh scripts/lib/common.sh \
-            scripts/bin/colossul-seats scripts/bin/colossul-portal-config \
+            scripts/*.sh scripts/lib/*.sh scripts/bin/* \
             build.sh tests/*.sh
 
       - name: Run checks
@@ -93,7 +93,7 @@ jobs:
         # The image chmods at build time, but a non-exec bit here usually means
         # someone edited over a Windows mount and lost it silently.
         run: |
-          for f in scripts/provision.sh scripts/seat-*.sh scripts/bin/*; do
+          for f in scripts/*.sh scripts/bin/*; do
             mode=$(git ls-files -s "$f" | cut -d' ' -f1)
             echo "$mode  $f"
             [ "$mode" = "100755" ] || { echo "::error file=$f::not executable in git (expected 100755, got $mode)"; exit 1; }
