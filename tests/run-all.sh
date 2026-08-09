@@ -38,7 +38,9 @@ note "EXECUTABLE BITS"
 # discovering it in CI after the fact. (lib/ and patches/ are sourced or run
 # via an interpreter and are correctly non-executable.)
 if git rev-parse --git-dir >/dev/null 2>&1; then
-    for f in scripts/provision.sh scripts/seat-*.sh scripts/bin/*; do
+    # Everything directly exec'd: the top-level scripts and the operator CLI.
+    # Globbed rather than listed so a new script is covered the day it lands.
+    for f in scripts/*.sh scripts/bin/*; do
         mode="$(git ls-files -s "$f" | cut -d' ' -f1)"
         if [ -z "$mode" ]; then
             echo "SKIP $f (not tracked yet)"
@@ -73,6 +75,9 @@ bash tests/check-tunnels.sh || rc=1
 
 note "SHARED MODEL STORE"
 bash tests/check-models.sh || rc=1
+
+note "CUSTOM NODES"
+bash tests/check-custom-nodes.sh || rc=1
 
 note "UPSTREAM PATCH"
 if [ $# -gt 0 ]; then

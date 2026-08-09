@@ -5,3 +5,4 @@ __pycache__/
 # They are never part of the image, and this keeps a plain `git add .` from
 # sweeping them into a commit.
 /.*.sh
+/.*.py

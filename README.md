@@ -286,6 +286,64 @@ colossul-seats rebuild       # force a full rebuild, then reload
 Standard `supervisorctl` also works: seats are grouped as `seat0`…`seat3`, so
 `supervisorctl restart seat1:` recycles just that seat.
 
+### Custom nodes
+
+Declared in [`custom-nodes.txt`](custom-nodes.txt), one git URL per line with an
+optional `@ref` to pin. Provisioning clones them into the shared
+`ComfyUI/custom_nodes/` and installs each pack's `requirements.txt`.
+
+```bash
+colossul-seats nodes          # after editing the manifest
+colossul-seats restart all    # then reload the seats
+```
+
+`Colossul_Studios_Nodes` is handled separately — it's copied from the private
+Storyrendr checkout that provisioning already fetched, rather than cloned.
+
+Three things worth knowing, all of which bite silently:
+
+- **ComfyUI never installs a custom node's `requirements.txt`.** Not at boot,
+  not ever — and ComfyUI-Manager only does it at the moment *it* installs a
+  pack. A hand-copied pack with missing deps just logs `(IMPORT FAILED)` in the
+  startup table and its nodes quietly don't exist. That is the entire reason
+  `install-custom-nodes.sh` exists.
+- **Node requirements can destroy your CUDA torch.** Many packs list a bare
+  `torch`/`numpy`/`opencv-python`; enough of them and pip swaps the CUDA build
+  for a CPU wheel, which surfaces much later as mysteriously slow inference.
+  Installation runs under a constraints file pinning torch, torchvision,
+  torchaudio, xformers, triton, numpy, the opencv variants and onnxruntime to
+  whatever is installed, so a conflicting request **fails loudly instead of
+  silently mutating the environment**. Both `PIP_CONSTRAINT` and `UV_CONSTRAINT`
+  are set — uv ignores the pip one entirely.
+- **Requirements install serially**, though clones run in parallel: concurrent
+  pip into one shared venv corrupts it. One bad pack is collected and reported,
+  never fatal.
+
+### ComfyUI version
+
+`COMFYUI_REF` (default `master`) selects what ComfyUI provisioning runs — the
+base image pins an older release than newer model families (Minimax H3, LTX,
+Wan Animate 2) need. **Pin a tag for production** so an upstream break can't
+reach artists mid-shoot; set it empty to keep the image's version. ComfyUI's own
+requirements are re-synced after any change, since an upgrade moves the pinned
+frontend package.
+
+### ComfyUI-Manager
+
+Enabled on every seat via `--enable-manager` (opt out with
+`ENABLE_COMFYUI_MANAGER=0`).
+
+> This is the **built-in manager** (a pip package), not the legacy
+> `custom_nodes/ComfyUI-Manager` checkout. If that checkout is present, ComfyUI's
+> `handle_comfyui_manager_unavailable()` logs a warning and **force-disables the
+> flag** — so the Manager appears simply not to work. The base image ships that
+> checkout, so provisioning renames it to `.replaced-by-pip-package` and installs
+> the pip package instead.
+
+All four seats share one `custom_nodes/`, so a node installed from one seat's
+Manager appears for everyone, and two artists installing simultaneously can
+conflict. Prefer the manifest for anything permanent.
+
 ### Models
 
 All seats read **one shared store**, so a 40 GB checkpoint costs 40 GB whether

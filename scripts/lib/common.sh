@@ -368,6 +368,52 @@ write_extra_model_paths() {
     } > "$outfile"
 }
 
+# ── Dependency protection ────────────────────────────────────────────────────
+# Custom node requirements.txt files routinely list bare `torch`, `numpy` or
+# `opencv-python`. Installing enough of them into one shared venv eventually
+# replaces the CUDA torch build with a CPU wheel, or downgrades numpy under
+# compiled packages — and the failure surfaces much later as an unrelated
+# ImportError or a silent fall back to CPU inference.
+#
+# Defence: pin the packages we refuse to lose to EXACTLY what is installed, and
+# let a conflicting request fail loudly at install time instead of quietly
+# mutating the environment.
+PROTECTED_PACKAGES="torch torchvision torchaudio xformers triton numpy \
+opencv-python opencv-python-headless opencv-contrib-python onnxruntime onnxruntime-gpu"
+
+# Writes a constraints file reflecting the currently-installed versions.
+#   write_pip_constraints <python> <outfile>
+write_pip_constraints() {
+    local py="$1" outfile="$2"
+    "$py" - "$PROTECTED_PACKAGES" <<'PY' > "$outfile"
+import sys
+try:
+    import importlib.metadata as md
+except ImportError:
+    sys.exit(0)
+for name in sys.argv[1].split():
+    try:
+        print(f"{name}=={md.version(name)}")
+    except Exception:
+        pass
+PY
+}
+
+# Export the constraint environment for a pip/uv invocation.
+#   pip reads PIP_CONSTRAINT; uv ignores it entirely and reads UV_CONSTRAINT,
+#   so both must be set or the protection silently does nothing under uv.
+#   The +cuXXX local version on torch only resolves from PyTorch's own index,
+#   which the base image identifies via PYTORCH_BACKEND (e.g. cu130).
+export_constraint_env() {
+    local cfile="$1"
+    export PIP_CONSTRAINT="$cfile" UV_CONSTRAINT="$cfile"
+    export PIP_BUILD_CONSTRAINT="$cfile" UV_BUILD_CONSTRAINT="$cfile"
+    if [ -n "${PYTORCH_BACKEND:-}" ]; then
+        export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/${PYTORCH_BACKEND}"
+        export UV_INDEX_STRATEGY="unsafe-best-match"
+    fi
+}
+
 # ── Tunnels ──────────────────────────────────────────────────────────────────
 # The base image's tunnel_manager opens a Cloudflare quick tunnel for every
 # entry in /etc/portal.yaml, so each seat already has a public URL. These two

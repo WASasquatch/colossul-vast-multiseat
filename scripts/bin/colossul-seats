@@ -7,6 +7,7 @@
 #   colossul-seats restart 2       recycle one employee's stack
 #   colossul-seats restart all     recycle every seat
 #   colossul-seats gpu             nvidia-smi, annotated with seat ownership
+#   colossul-seats nodes           re-install custom nodes (after editing the manifest)
 #   colossul-seats provision       re-run provisioning (picks up new commits)
 #   colossul-seats rebuild         force a full rebuild, then re-provision
 set -euo pipefail
@@ -98,6 +99,11 @@ case "${1:-}" in
     logs)      shift; cmd_logs "$@" ;;
     restart)   shift; cmd_restart "$@" ;;
     gpu)       shift; cmd_gpu "$@" ;;
+    nodes)     shift
+               "${COLOSSUL_LIB:-/opt/colossul}/install-custom-nodes.sh" "$@"
+               echo ""
+               log "Restart seats to load them:  colossul-seats restart all"
+               ;;
     provision) shift; exec /opt/colossul/provision.sh ;;
     rebuild)   shift; FORCE_REPROVISION=1 exec /opt/colossul/provision.sh ;;
     ""|-h|--help|help) usage ;;

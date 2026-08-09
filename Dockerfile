@@ -50,6 +50,16 @@ ENV NUM_SEATS=4 \
     STORYRENDR_REPO=https://github.com/WASasquatch/storyrendr-services.git \
     STORYRENDR_REF=main
 
+# ComfyUI version to run. The base image pins an older release than newer model
+# families need (Minimax H3, LTX, Wan Animate 2), so provisioning updates the
+# checkout to this ref at boot. Pin a tag here for production; set empty to keep
+# whatever the base image shipped.
+ENV COMFYUI_REF=master
+
+# ComfyUI-Manager on by default, via --enable-manager on every seat. Set 0 to
+# keep artists out of node installation.
+ENV ENABLE_COMFYUI_MANAGER=1
+
 # NOTE: this ENV does NOT produce the console's "Open" button. Verified against
 # vast-ai/base-image source: nothing in the container reads OPEN_BUTTON_PORT
 # (current scripts gate on /etc/portal.yaml instead), and the console renders
@@ -126,6 +136,9 @@ RUN set -euo pipefail; \
 # Our own scripts
 # ─────────────────────────────────────────────────────────────────────────────
 COPY scripts/ /opt/colossul/
+# The custom node manifest ships beside the scripts so an operator can edit it
+# in place on a running instance and re-run `colossul-seats nodes`.
+COPY custom-nodes.txt /opt/colossul/custom-nodes.txt
 RUN chmod +x /opt/colossul/*.sh /opt/colossul/bin/* && \
     ln -sf /opt/colossul/bin/colossul-seats /usr/local/bin/colossul-seats && \
     ln -sf /opt/colossul/bin/colossul-portal-config /usr/local/bin/colossul-portal-config && \

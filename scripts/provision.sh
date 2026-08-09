@@ -277,25 +277,50 @@ fi
 CUSTOM_NODES="$COMFYUI_HOME/custom_nodes"
 mkdir -p "$CUSTOM_NODES"
 
+# ── Upgrade ComfyUI itself ──────────────────────────────────────────────────
+# The base image pins an older ComfyUI than newer model families need (Minimax
+# H3, LTX, Wan Animate 2 all landed after it). COMFYUI_REF selects what to run:
+# a branch for latest, or a tag/commit to pin production. Empty = leave the
+# image's version untouched.
+COMFYUI_REF="${COMFYUI_REF:-master}"
+if [ -n "$COMFYUI_REF" ] && [ -d "$COMFYUI_HOME/.git" ]; then
+    before="$(git -C "$COMFYUI_HOME" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    log "Updating ComfyUI to '$COMFYUI_REF' (currently $before)..."
+    if git -C "$COMFYUI_HOME" fetch --depth 1 origin "$COMFYUI_REF" >/dev/null 2>&1 \
+       && git -C "$COMFYUI_HOME" reset --hard -q FETCH_HEAD; then
+        after="$(git -C "$COMFYUI_HOME" rev-parse --short HEAD)"
+        ver="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$COMFYUI_HOME/comfyui_version.py" 2>/dev/null)"
+        if [ "$before" = "$after" ]; then
+            log "  ComfyUI already current at $after${ver:+ (v$ver)}"
+        else
+            log "  ComfyUI updated $before -> $after${ver:+ (v$ver)}"
+        fi
+    else
+        warn "  Could not fetch '$COMFYUI_REF' — staying on $before."
+        warn "  Check COMFYUI_REF names a real branch/tag/commit."
+    fi
+elif [ -n "$COMFYUI_REF" ]; then
+    warn "$COMFYUI_HOME is not a git checkout — cannot honour COMFYUI_REF=$COMFYUI_REF."
+fi
+
 # The stock launcher re-syncs ComfyUI's own requirements on every non-first
 # boot (its frontend package drifts after a Manager update). We do it once here
 # instead of in each seat wrapper, where four concurrent pip installs into one
-# shared venv would race.
+# shared venv would race. Mandatory after an upgrade, which usually moves the
+# pinned comfyui-frontend-package.
 if [ "${SKIP_COMFYUI_REQS:-0}" != "1" ] && [ -f "$COMFYUI_HOME/requirements.txt" ]; then
-    log "Re-syncing ComfyUI requirements (shared venv)..."
+    log "Syncing ComfyUI requirements (shared venv)..."
     ( cd "$COMFYUI_HOME" && uv pip install --python "$COMFYUI_PYTHON" \
         --no-cache-dir -r requirements.txt ) \
         || warn "ComfyUI requirement sync failed — the UI may be out of step with the backend."
 fi
 
-NODES_SRC="$SRC_DIR/Colossul_Studios_Nodes"
-if [ -d "$NODES_SRC" ]; then
-    log "Installing Colossul Studios nodes -> $CUSTOM_NODES"
-    rm -rf "$CUSTOM_NODES/Colossul_Studios_Nodes"
-    cp -r "$NODES_SRC" "$CUSTOM_NODES/Colossul_Studios_Nodes"
-else
-    warn "Colossul_Studios_Nodes/ not found in the checkout — Storyrendr workflows will fail to resolve nodes."
-fi
+# ── Custom nodes (Colossul + the manifest) ──────────────────────────────────
+# Delegated so an operator can re-run it alone after editing custom-nodes.txt,
+# without a full re-provision: colossul-seats nodes
+log "Installing custom nodes..."
+"${COLOSSUL_LIB}/install-custom-nodes.sh" \
+    || warn "Custom node installation reported problems — see above."
 
 VNCCS_VENDOR="$BACKEND_DIR/vendor/vnccs_utils"
 if [ -d "$VNCCS_VENDOR" ] && [ -n "$(ls -A "$VNCCS_VENDOR" 2>/dev/null)" ]; then

@@ -63,6 +63,21 @@ if [ -z "${LD_PRELOAD:-}" ] && ldconfig -p 2>/dev/null | grep -q libtcmalloc_min
     export LD_PRELOAD=libtcmalloc_minimal.so.4
 fi
 
+# ComfyUI-Manager is opt-out. It is the built-in manager (pip package), enabled
+# by this flag — NOT the legacy custom_nodes/ComfyUI-Manager checkout, which
+# provisioning retires because its presence makes ComfyUI force this flag off.
+#
+# Caveat worth knowing: all four seats share one custom_nodes directory, so a
+# node installed from one seat's Manager appears for everyone, and two seats
+# installing at the same moment can conflict. Set ENABLE_COMFYUI_MANAGER=0 to
+# keep artists out of it.
+MANAGER_ARGS=()
+if [ "${ENABLE_COMFYUI_MANAGER:-1}" = "1" ]; then
+    MANAGER_ARGS+=(--enable-manager)
+else
+    log "seat $SEAT: ComfyUI-Manager disabled (ENABLE_COMFYUI_MANAGER=0)"
+fi
+
 log "seat $SEAT: ComfyUI on GPU $GPU -> 127.0.0.1:$PORT"
 
 cd "$COMFYUI_HOME"
@@ -71,6 +86,7 @@ exec "$COMFYUI_PYTHON" main.py \
     --port "$PORT" \
     --disable-auto-launch \
     --enable-cors-header \
+    ${MANAGER_ARGS[@]+"${MANAGER_ARGS[@]}"} \
     --input-directory  "$D/comfyui/input" \
     --output-directory "$D/comfyui/output" \
     --temp-directory   "$D/comfyui/temp" \
