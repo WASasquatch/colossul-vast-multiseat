@@ -127,7 +127,15 @@ Done. You never have to do Part 1 again.
    - Plenty of **RAM** — aim for 128 GB or more
    - A **high reliability** score
    - **Fast download speed** (the server has a lot to fetch on first run)
+   - **Max CUDA of 13.0 or higher** — shown on each offer. If the machine's
+     number is lower, use the `...:latest-cuda12.9` image instead (see the
+     cheat sheet), or pick a different machine.
 5. Click **RENT** on the one you like.
+
+> **Machines vary in quality.** Some hosts are simply broken and a rented
+> instance will fail to start through no fault of yours. This is normal on a
+> marketplace — destroy it and rent a different one. You are billed by the
+> second, so a failed start costs pennies. See the first troubleshooting entry.
 
 ### Step 5: Wait for it to get ready
 
@@ -228,6 +236,24 @@ and download.
 
 ## If something looks wrong
 
+**The instance says "Error response from daemon ... nvidia-container-cli:
+device error: GPU-xxxx: unknown device".**
+
+**This is a broken machine, not a problem with our software** — the server never
+even started. The host's graphics card isn't answering properly, and *any*
+image would fail the same way on it.
+
+> **DESTROY the instance and rent a different machine.** That's the fix. It
+> costs pennies. If you like, note the Machine ID so you can avoid it later.
+
+If it happens on several machines in a row, the image and the hosts' drivers may
+be mismatched — switch the template's image to:
+```
+ghcr.io/wasasquatch/colossul-vast-multiseat:latest-cuda12.9
+```
+which works with older graphics drivers, and prefer offers whose **Max CUDA** is
+13.0 or higher.
+
 **It's been half an hour and it isn't ready.**
 Open the **Logs**. If you see `[colossul]` lines still appearing, it's working —
 downloading takes a while on slower machines. Leave it another 15 minutes.
@@ -264,6 +290,7 @@ admin — it's one command (`colossul-seats restart 2`).
 |---|---|
 | Website | [cloud.vast.ai](https://cloud.vast.ai) |
 | Image | `ghcr.io/wasasquatch/colossul-vast-multiseat:latest` |
+| Image (older drivers) | `ghcr.io/wasasquatch/colossul-vast-multiseat:latest-cuda12.9` |
 | Launch Mode | **Docker ENTRYPOINT** |
 | Disk | 150 GB+ |
 | GPUs | 4 |

@@ -70,6 +70,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Two CUDA variants. Vast hosts differ in driver version, and a host whose
+    # "Max CUDA" is below the image's CUDA can't run it — so publish a 12.9
+    # build alongside the default 13.2 and let the operator match the machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - base: vastai/comfy:v0.30.0-cuda-13.2-py312
+            suffix: ''
+          - base: vastai/comfy:v0.30.0-cuda-12.9-py312
+            suffix: '-cuda12.9'
     steps:
       - uses: actions/checkout@v4
 
@@ -99,6 +110,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # onlatest so the variant suffix reaches :latest too, giving
+          # :latest and :latest-cuda12.9 rather than one clobbering the other.
+          flavor: |
+            suffix=${{ matrix.suffix }},onlatest=true
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -116,23 +131,22 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_IMAGE=${{ github.event.inputs.base_image || env.DEFAULT_BASE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            BASE_IMAGE=${{ github.event.inputs.base_image || matrix.base }}
+          # Scope the cache per variant, or the two matrix legs would evict
+          # each other's layers on every run.
+          cache-from: type=gha,scope=${{ matrix.base }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.base }}
 
       - name: Summary
         run: |
           {
-            echo "### Image published"
+            echo "### Published (base: \`${{ matrix.base }}\`)"
             echo ""
             echo '```'
             echo "${{ steps.meta.outputs.tags }}"
             echo '```'
             echo ""
-            echo "Point the Vast template at one of the tags above."
-            echo ""
-            echo "> First publish only: the GHCR package is **private** by default."
-            echo "> Vast hosts cannot pull it until you set the package to public"
-            echo "> (Packages → this package → Package settings → Change visibility),"
-            echo "> or add registry credentials to the template."
+            echo "Point the Vast template at one of the tags above. Pick the CUDA"
+            echo "variant that the host machine can actually run — compare the"
+            echo "machine's **Max CUDA** on the Vast offer against the image's CUDA."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -18,13 +18,18 @@ ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 ```
 
 Published automatically by CI and **publicly pullable** — verified anonymously,
-so a Vast host needs no registry credentials. Available tags:
+so a Vast host needs no registry credentials. Two CUDA variants are built from
+every commit, because hosts differ in driver version:
 
-| Tag | Use |
-|---|---|
-| `latest` | tracks `main` — fine for testing |
-| `sha-<short>` | **pin this for production**, so a later push can't change what your template launches |
-| `main` | same as `latest` |
+| Tag | Base | Use |
+|---|---|---|
+| `latest` | CUDA 13.2 | Default. Needs a host with **Max CUDA ≥ 13.0**. |
+| `latest-cuda12.9` | CUDA 12.9 | Fallback for hosts with older drivers. |
+| `sha-<short>` / `sha-<short>-cuda12.9` | either | **Pin one for production**, so a later push can't change what your template launches. |
+| `main` | CUDA 13.2 | Same as `latest`. |
+
+Check the **Max CUDA** figure on a Vast offer before renting. If it is below the
+image's CUDA version, the instance will fail to start.
 
 If a host ever reports `denied` or `manifest unknown`, the package visibility
 was changed: Repo → **Packages** → `colossul-vast-multiseat` → **Package
@@ -259,6 +264,20 @@ remain separate.
 ---
 
 ## Troubleshooting
+
+**The instance never starts: `nvidia-container-cli: device error: GPU-<uuid>:
+unknown device`.**
+
+Not an image problem — the container never ran. This is an OCI *prestart hook*,
+executed by the NVIDIA runtime before your entrypoint: it asked the host driver
+for a GPU by UUID and the driver didn't recognise it. Usually a host whose GPU
+has dropped off the bus or whose driver state is stale after maintenance. Any
+image, including stock `vastai/comfy` or `nvidia/cuda`, fails identically on
+that machine.
+
+**Destroy the instance and rent a different one.** If it repeats across several
+machines, suspect a driver/CUDA mismatch instead: switch to
+`:latest-cuda12.9` and filter for offers with a higher **Max CUDA**.
 
 **Provisioning failed with a token error.** `GITHUB_TOKEN` is missing, expired,
 or lacks read access to the repo. Fix it in the template and restart, or set it
