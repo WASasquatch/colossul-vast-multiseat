@@ -355,6 +355,25 @@ ghcr.io/wasasquatch/colossul-vast-multiseat:latest-cuda12.9
 which works with older graphics drivers, and prefer offers whose **Max CUDA** is
 13.0 or higher.
 
+**A seat link just shows a spinner saying "Loading: Check instance logs for
+progress".**
+
+Almost always this means **the server isn't finished setting up yet** — it is
+not an error. The web addresses go live within seconds of the server starting,
+but the four workstations are the *last* thing to be built, 10–20 minutes in. So
+the links exist and answer long before there's anything behind them.
+
+Check the **LOG**. You are ready when you see the big block that ends with:
+
+```
+==================================================================
+  COLOSSUL MULTI-SEAT — READY
+==================================================================
+```
+
+Until then, the spinner is expected. If it's still spinning **30+ minutes** in,
+look in the log for a line containing `ERROR` — that will say what went wrong.
+
 **It's been half an hour and it isn't ready.**
 Open the **Logs**. If you see `[colossul]` lines still appearing, it's working —
 downloading takes a while on slower machines. Leave it another 15 minutes.

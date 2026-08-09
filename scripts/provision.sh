@@ -365,7 +365,7 @@ supervisorctl update
 if [ "$SEATS_EXISTED" = "1" ] && [ "$NEED_BUILD" = "1" ]; then
     log "New build — restarting seats so they pick it up..."
     for ((i = 0; i < SEAT_COUNT; i++)); do
-        supervisorctl restart "seat${i}:" >/dev/null 2>&1 \
+        supervisorctl restart "seat${i}:*" >/dev/null 2>&1 \
             || warn "seat $i did not restart cleanly — check: colossul-seats logs $i"
     done
 fi
@@ -374,7 +374,13 @@ fi
 # 9. Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-log "Provisioning complete — waiting for $SEAT_COUNT seat(s) to come up..."
+log "=============================================================="
+log " Seats are the LAST thing to start."
+log " Until the READY block appears below, every seat URL will show"
+log " a spinner — Caddy and the tunnels are live from boot, but"
+log " there is nothing listening behind them yet. This is normal."
+log "=============================================================="
+log "Waiting for $SEAT_COUNT seat(s) to come up..."
 
 # Wait for the seats, and give Cloudflare a moment to hand out tunnel URLs, so
 # the summary below reports what is actually true. Both are bounded: a stuck
@@ -392,7 +398,7 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 5
 done
 
-supervisorctl status 'seat*:*' 2>/dev/null | sed 's/^/[colossul]   /' || true
+seat_status_lines | sed 's/^/[colossul]   /' || true
 
 # LAST thing in the log, deliberately: everything needed to start work.
 print_access_summary "$SEAT_COUNT"

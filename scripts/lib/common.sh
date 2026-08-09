@@ -426,11 +426,23 @@ external_url() {
 
 # Wait for the seat programs to reach RUNNING, so the summary reflects reality
 # rather than intent. Bounded: a stuck seat must not hold the summary hostage.
+# How many seat processes are RUNNING. Uses bare `supervisorctl status` and
+# filters here: supervisorctl accepts `<name>` or `<gname>:*` but does NOT glob
+# group names (it doesn't even import fnmatch), so `seat*:*` silently matches
+# nothing and every count comes back zero.
+seats_running() {
+    supervisorctl status 2>/dev/null | awk '/^seat[0-9]+-/ && /RUNNING/' | wc -l
+}
+
+seat_status_lines() {
+    supervisorctl status 2>/dev/null | awk '/^seat[0-9]+-/'
+}
+
 wait_for_seats() {
     local n="$1" timeout="${2:-120}" waited=0 want got
     want=$(( n * 3 ))
     while [ "$waited" -lt "$timeout" ]; do
-        got=$(supervisorctl status 'seat*:*' 2>/dev/null | grep -c RUNNING || true)
+        got="$(seats_running)"
         [ "${got:-0}" -ge "$want" ] && return 0
         sleep 5; waited=$(( waited + 5 ))
     done

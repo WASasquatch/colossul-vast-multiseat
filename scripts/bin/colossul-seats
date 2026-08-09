@@ -44,7 +44,7 @@ cmd_status() {
     local i
     for ((i = 0; i < SEAT_COUNT; i++)); do
         echo "── seat $i  (GPU $(gpu_for_seat "$i")) ─────────────────────────────"
-        supervisorctl status "seat${i}:" 2>/dev/null || echo "  not registered — run: colossul-seats provision"
+        supervisorctl status "seat${i}:*" 2>/dev/null || echo "  not registered — run: colossul-seats provision"
     done
 }
 
@@ -71,13 +71,13 @@ cmd_restart() {
         local i
         for ((i = 0; i < SEAT_COUNT; i++)); do
             log "restarting seat $i ..."
-            supervisorctl restart "seat${i}:" || warn "seat $i restart reported an error"
+            supervisorctl restart "seat${i}:*" || warn "seat $i restart reported an error"
         done
         return 0
     fi
     require_seat "$target"
     log "restarting seat $target ..."
-    supervisorctl restart "seat${target}:"
+    supervisorctl restart "seat${target}:*"
 }
 
 cmd_gpu() {
