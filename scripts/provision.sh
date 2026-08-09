@@ -104,6 +104,11 @@ for stock in comfyui api-wrapper; do
     fi
 done
 
+# Announce the control panel the moment its tunnel exists (usually seconds in),
+# so the operator has something clickable during the 10-20 minute build instead
+# of a spinner. Backgrounded: a rate-limited tunnel must not delay the build.
+( print_early_access 60 | access_log_tee --append ) &
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Fetch the Storyrendr source
 # ─────────────────────────────────────────────────────────────────────────────
@@ -401,4 +406,6 @@ done
 seat_status_lines | sed 's/^/[colossul]   /' || true
 
 # LAST thing in the log, deliberately: everything needed to start work.
-print_access_summary "$SEAT_COUNT"
+# Also written to /var/log/portal/ACCESS.log so it has a permanent, findable
+# home in the Instance Portal's log viewer rather than only scrolling past.
+print_access_summary "$SEAT_COUNT" | access_log_tee

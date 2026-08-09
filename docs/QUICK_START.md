@@ -98,10 +98,15 @@ ghcr.io/wasasquatch/colossul-vast-multiseat:latest
 > on to an old copy of `latest`, so a version number is the reliable way to be
 > sure you're getting the newest software.
 
-**Docker Options** (this opens the doors artists connect through)
+**Docker Options** (this opens the doors artists connect through, **and** makes
+the blue "Open" button appear)
 ```
--p 1111:1111 -p 8080:8080 -p 8190:8190 -p 8191:8191 -p 8200:8200 -p 8201:8201 -p 8210:8210 -p 8211:8211 -p 8220:8220 -p 8221:8221
+-e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1 -p 1111:1111 -p 8080:8080 -p 8190:8190 -p 8191:8191 -p 8200:8200 -p 8201:8201 -p 8210:8210 -p 8211:8211 -p 8220:8220 -p 8221:8221
 ```
+
+> The two `-e` entries at the front are exactly what Vast's own official
+> templates use — without them the console says *"Instance is running but has
+> no web interface"*. The `1` is a placeholder Vast replaces automatically.
 
 **Launch Mode** — choose **`Docker ENTRYPOINT`**
 
@@ -118,17 +123,13 @@ went on your account in Step 2):
 
 | Key | Value |
 |---|---|
-| `OPEN_BUTTON_PORT` | `1111` |
 | `WEB_PASSWORD` | a password you choose |
 
-> **`OPEN_BUTTON_PORT` is what makes the blue "Open" button appear.** Leave it
-> out and your server will run perfectly but Vast will say *"Instance is running
-> but has no web interface"*, with no obvious way in. It must be set here, on
-> the template.
->
 > `WEB_PASSWORD` becomes the password for every seat and for the file manager.
-> Without it the system generates a random one that is genuinely awkward to look
-> up. The username is always `vastai`.
+> Without it the system generates a random one. The username is always `vastai`.
+>
+> (The Open-button settings went in **Docker Options** above — don't add them
+> twice.)
 
 4. Click **Create**.
 
@@ -168,6 +169,18 @@ Done. You never have to do Part 1 again.
 3. Click the **Logs** button (📄 icon) on the instance to watch progress.
    Look for lines starting with `[colossul]`.
 
+**Within the first minute or two**, a box like this appears in the log:
+
+```
+------------------------------------------------------------------
+  CONTROL PANEL IS UP — you can open it NOW (setup continues)
+      https://something-random.trycloudflare.com/?token=...
+------------------------------------------------------------------
+```
+
+That link opens the control panel **already logged in** — one click, no
+password. You can watch setup from there instead of the raw log.
+
 You're ready when the log says:
 
 ```
@@ -180,7 +193,16 @@ You're ready when the log says:
 
 ### Step 6: Get the 4 artist links
 
-1. On your instance, click the **Open** button.
+The easiest way: scroll to the **end of the log**. The setup finishes by
+printing a `COLOSSUL MULTI-SEAT — READY` block containing **one
+already-logged-in link per artist** — copy each line and send it. That block is
+also saved on the server (control panel → **Logs** → **ACCESS**), so you can
+find it again any time.
+
+Or use the control panel:
+
+1. On your instance, click the **Open** button (or the CONTROL PANEL link from
+   Step 5 if the button is missing).
 2. A page opens listing every app on the server. You'll see four entries:
 
    | Entry | Give to |
@@ -296,16 +318,21 @@ Open button.**
 
 The server is running fine — Vast just doesn't know which page to open.
 
-**Almost always this means `OPEN_BUTTON_PORT` is missing from your template.**
-Add it (Step 3):
+**Check what the instance actually received:** on the instance card, open the
+**Environment** tab. If `OPEN_BUTTON_PORT` is not in that list, this instance
+was created without it and the button can never appear on it.
 
-| Key | Value |
-|---|---|
-| `OPEN_BUTTON_PORT` | `1111` |
+**The fix:** make sure your template's **Docker Options** starts with
 
-It has to be on the *template*; the setting can't come from the software itself.
-Existing instances won't pick it up — save the template, then destroy and rent
-again.
+```
+-e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1
+```
+
+(exactly as in Step 3 — this mirrors Vast's own templates), **save the
+template**, then destroy and re-rent. Editing a template never changes an
+already-created instance, and be careful to rent using the *edited* template —
+after saving, re-select it in the search page's template picker so you're not
+launching a stale copy.
 
 **You don't have to wait for that to get in.** Click the **LOG** button and look
 near the end for lines like:

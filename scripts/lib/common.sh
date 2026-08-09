@@ -405,6 +405,36 @@ tunnel_map() {
 # lines of pip output and cloudflared chatter - which is not usable when someone
 # just wants to hand four links to four artists.
 
+# The instance credential: operator-chosen WEB_PASSWORD when set, else the
+# auto-generated token. Empty when neither is available yet.
+web_password() {
+    echo "${WEB_PASSWORD:-${OPEN_BUTTON_TOKEN:-}}"
+}
+
+# Append the auth token to a URL so it logs straight in - Caddy accepts
+# ?token= in place of the basic-auth prompt (it is what the Open button sets
+# as a cookie). Only for real URLs; placeholders pass through untouched.
+tokenized() {
+    local url="$1" pw
+    pw="$(web_password)"
+    case "$url" in
+        http*) if [ -n "$pw" ]; then printf '%s/?token=%s' "$url" "$pw"; else printf '%s' "$url"; fi ;;
+        *) printf '%s' "$url" ;;
+    esac
+}
+
+# Mirror access info into /var/log/portal/ACCESS.log so it shows up as its own
+# entry in the Instance Portal log viewer and survives on disk. Falls back to
+# plain pass-through when the directory isn't writable (tests, degraded boot).
+access_log_tee() {
+    local f=/var/log/portal/ACCESS.log
+    if mkdir -p /var/log/portal 2>/dev/null && [ -w /var/log/portal ]; then
+        if [ "${1:-}" = "--append" ]; then tee -a "$f"; else tee "$f"; fi
+    else
+        cat
+    fi
+}
+
 # The instance's public address for a given EXTERNAL port. Vast publishes the
 # host-side mapping as VAST_TCP_PORT_<external>, so prefer the Cloudflare tunnel
 # and fall back to the direct address.
@@ -449,11 +479,42 @@ wait_for_seats() {
     return 1
 }
 
+# Printed as soon as the Instance Portal's tunnel exists - minutes before the
+# seats. Every seat URL shows a spinner while provisioning runs, so without
+# this the operator has nothing clickable until the very end.
+# Pure print; call sites tee it into ACCESS.log.
+print_early_access() {
+    local timeout="${1:-45}" waited=0 url="" tmap="" pw
+    while :; do
+        tmap="$(tunnel_map)"
+        url="$(printf '%s\n' "$tmap" | awk -F'\t' '$1==1111 {print $2; exit}')"
+        [ -n "$url" ] && break
+        [ "$waited" -ge "$timeout" ] && break
+        sleep 5; waited=$(( waited + 5 ))
+    done
+    [ -n "$url" ] || url="$(external_url 1111 "$tmap")"
+    pw="$(web_password)"; [ -n "$pw" ] || pw="<see the 'Your web credentials' lines in this log>"
+
+    echo ""
+    echo "------------------------------------------------------------------"
+    echo "  CONTROL PANEL IS UP — you can open it NOW (setup continues)"
+    case "$url" in
+        http*) echo "      $(tokenized "$url")" ;;
+        *)     echo "      $url" ;;
+    esac
+    echo "      username: vastai    password: $pw"
+    echo ""
+    echo "  Seat links appear on that page as they come up. The READY block"
+    echo "  prints at the very end of this log when everything is done."
+    echo "------------------------------------------------------------------"
+    echo ""
+}
+
 print_access_summary() {
     local n="$1" tmap i gpu pw
     tmap="$(tunnel_map)"
     # WEB_PASSWORD when the operator set one, else the generated token.
-    pw="${WEB_PASSWORD:-${OPEN_BUTTON_TOKEN:-<see the 'Your web credentials' line above>}}"
+    pw="$(web_password)"; [ -n "$pw" ] || pw="<see the 'Your web credentials' line above>"
 
     echo ""
     echo "=================================================================="
@@ -465,13 +526,14 @@ print_access_summary() {
     echo "      password:  $pw"
     echo ""
     echo "  INSTANCE PORTAL (all seats listed here)"
-    echo "      $(external_url 1111 "$tmap")"
+    echo "      $(tokenized "$(external_url 1111 "$tmap")")"
     echo ""
-    echo "  GIVE ONE LINK TO EACH ARTIST"
+    echo "  GIVE ONE LINK TO EACH ARTIST (each logs straight in)"
     printf '      %-5s %-4s %s\n' "SEAT" "GPU" "STORYRENDR"
     for ((i = 0; i < n; i++)); do
         gpu="$(gpu_for_seat "$i")"
-        printf '      %-5s %-4s %s\n' "$i" "$gpu" "$(external_url "$(frontend_ext "$i")" "$tmap")"
+        printf '      %-5s %-4s %s\n' "$i" "$gpu" \
+            "$(tokenized "$(external_url "$(frontend_ext "$i")" "$tmap")")"
     done
     echo ""
     echo "  ComfyUI directly (optional, for advanced use)"
@@ -480,9 +542,12 @@ print_access_summary() {
     done
     echo ""
     echo "  NOTES"
-    echo "      - A login prompt is expected. To skip it, append to any URL:"
-    echo "            ?token=$pw"
-    echo "      - Every seat shares this one password. Do not post links publicly."
+    echo "      - The links above are PRE-AUTHENTICATED: anyone holding one is"
+    echo "        logged in. Treat them like passwords; send privately."
+    echo "      - If a login box ever appears:  vastai / the password above,"
+    echo "        or append  ?token=$pw  to the URL."
+    echo "      - This block is saved to /var/log/portal/ACCESS.log"
+    echo "        (Instance Portal -> Logs -> ACCESS)."
     echo "      - Put model weights in: ${ASSETS_ROOT}/models  (shared by all seats)"
     echo "      - Admin:  colossul-seats status | urls | logs <n> | restart <n>"
     echo ""

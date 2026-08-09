@@ -138,15 +138,31 @@ loopback. To expose their FastAPI `/docs` too, regenerate with
 | Variable | Value |
 |---|---|
 | `GITHUB_TOKEN` | A GitHub PAT with read access to `WASasquatch/storyrendr-services` — request it from [@WASasquatch](https://github.com/WASasquatch) (Colossul) |
-| `OPEN_BUTTON_PORT` | `1111` |
 
-> **`OPEN_BUTTON_PORT` must be set *here*, on the template.** The image also sets
-> it, but that only reaches the container — Vast's console decides whether to
-> show the **Open** button from the *template's* stored configuration and never
-> inspects the image's ENV. Omit it and the instance runs perfectly while the
-> console reports "Instance is running but has no web interface". Per Vast's
-> docs it "maps the open button to whatever external port maps to the specified
-> internal port"; `1111` is the Instance Portal, which links out to every seat.
+> **The Open button comes from the template's Docker Options, not from here and
+> not from the image.** Put this at the front of the Docker Options field,
+> exactly as Vast's own stock templates do (verified verbatim against the
+> official PyTorch and ComfyUI templates via Vast's template API):
+>
+> ```
+> -e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1
+> ```
+>
+> Three facts worth knowing, all verified against Vast's docs and the
+> `vast-ai/base-image` source:
+>
+> - The console renders the button from the template/instance env config.
+>   **Nothing inside the container reads `OPEN_BUTTON_PORT`** — a repo-wide
+>   grep of `vast-ai/base-image` finds it only in template definitions, never
+>   in executable code — so the `ENV` this image sets cannot produce the
+>   button; it exists only for compatibility with older derivative scripts.
+> - `OPEN_BUTTON_TOKEN=1` is a placeholder; Vast always overwrites it with the
+>   generated token at instance creation.
+> - Per the docs, the Docker Options field and the Environment Variables widget
+>   are *the same stored data* — so after renting, confirm on the instance
+>   card's **Environment** tab that `OPEN_BUTTON_PORT` is actually present. If
+>   it isn't, the instance was created from a template copy that lacks it;
+>   editing a template never updates an existing instance.
 
 A fine-grained token scoped to that single repository is sufficient:
 

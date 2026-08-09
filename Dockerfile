@@ -50,12 +50,13 @@ ENV NUM_SEATS=4 \
     STORYRENDR_REPO=https://github.com/WASasquatch/storyrendr-services.git \
     STORYRENDR_REF=main
 
-# The base image's supervisor scripts want OPEN_BUTTON_PORT present in the
-# container, so set it here — but note this is NOT what makes the console's
-# "Open" button appear. Vast decides that from the *template's* stored
-# environment and never inspects the image's ENV, so the template must set
-# OPEN_BUTTON_PORT=1111 as well or the console reports "Instance is running but
-# has no web interface". See docs/VAST_TEMPLATE.md.
+# NOTE: this ENV does NOT produce the console's "Open" button. Verified against
+# vast-ai/base-image source: nothing in the container reads OPEN_BUTTON_PORT
+# (current scripts gate on /etc/portal.yaml instead), and the console renders
+# the button purely from the TEMPLATE's docker options — which must therefore
+# carry `-e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1`, exactly as Vast's
+# stock templates do. Kept only for compatibility with older derivative scripts
+# whose READMEs describe gating services on this variable.
 ENV OPEN_BUTTON_PORT=1111
 
 # Instance Portal entries for the default 4 seats. Regenerate with

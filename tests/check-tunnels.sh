@@ -104,4 +104,30 @@ echo "  degrades to a placeholder rather than an empty or broken URL"
 echo "PASS: access summary is correct and never leaves the operator stranded"
 
 echo ""
+echo "=== 7. links are pre-authenticated, and the early box works ==="
+# Every artist-facing link must carry ?token= so one click logs straight in;
+# a bare link puts a non-technical user in front of a 64-char password prompt.
+export WEB_PASSWORD='pw123'
+tunnel_map() { printf '1111\thttps://portal.try\n8190\thttps://seat0.try\n'; }
+out="$(print_access_summary 1)"
+grep -q 'https://portal.try/?token=pw123' <<< "$out" || fail "portal link not pre-authenticated"
+grep -q 'https://seat0.try/?token=pw123'  <<< "$out" || fail "seat link not pre-authenticated"
+echo "  summary links carry ?token="
+
+out="$(print_early_access 0)" || fail "print_early_access exited non-zero"
+grep -q 'CONTROL PANEL IS UP' <<< "$out" || fail "early box missing its banner"
+grep -q 'https://portal.try/?token=pw123' <<< "$out" || fail "early box link not pre-authenticated"
+echo "  early box prints a one-click portal link"
+
+# No tunnel and no public address: must degrade to a placeholder, never hang
+# (timeout 0) and never emit a bogus tokenised placeholder.
+tunnel_map() { :; }
+unset PUBLIC_IPADDR 2>/dev/null || true
+out="$(print_early_access 0)" || fail "early box crashed with no tunnel"
+grep -q 'see IP & Port Info' <<< "$out" || fail "early box should degrade to a placeholder"
+grep -q '<port 1111.*?token=' <<< "$out" && fail "placeholder must not be tokenised"
+echo "  degrades to a placeholder without hanging"
+echo "PASS: one-click links, early announcement, graceful degradation"
+
+echo ""
 echo "ALL TUNNEL CHECKS PASSED"

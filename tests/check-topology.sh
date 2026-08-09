@@ -141,6 +141,17 @@ grep -qE "(^|,)$obp(,|$)" \
     || fail "OPEN_BUTTON_PORT=$obp is not in the port list, so it would never be exposed"
 echo "PASS: OPEN_BUTTON_PORT=$obp is proxied and exposed"
 
+# The console renders the Open button from the TEMPLATE's docker options, not
+# the image ENV (verified against vast-ai/base-image: no executable code reads
+# OPEN_BUTTON_PORT). So the docs' copy-paste Docker Options line must carry the
+# -e flags Vast's own stock templates use, or operators get "Instance is
+# running but has no web interface" with no way in.
+for doc in "$ROOT/docs/QUICK_START.md" "$ROOT/docs/VAST_TEMPLATE.md"; do
+    grep -q -- '-e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1' "$doc" \
+        || fail "$(basename "$doc") must tell operators to put '-e OPEN_BUTTON_PORT=1111 -e OPEN_BUTTON_TOKEN=1' in Docker Options"
+done
+echo "PASS: both guides carry the template-side Open-button flags"
+
 echo ""
 echo "=== 6. every documented port list matches PORTAL_CONFIG ==="
 # `|| true`: an empty grep result must reach the explicit check below rather
