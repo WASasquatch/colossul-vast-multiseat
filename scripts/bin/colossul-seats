@@ -8,6 +8,8 @@
 #   colossul-seats restart all     recycle every seat
 #   colossul-seats gpu             nvidia-smi, annotated with seat ownership
 #   colossul-seats nodes           re-install custom nodes (after editing the manifest)
+#   colossul-seats models --list   model sets available to download, and sizes
+#   colossul-seats models minimax-h3   download that set into the shared store
 #   colossul-seats provision       re-run provisioning (picks up new commits)
 #   colossul-seats rebuild         force a full rebuild, then re-provision
 set -euo pipefail
@@ -103,6 +105,9 @@ case "${1:-}" in
                "${COLOSSUL_LIB:-/opt/colossul}/install-custom-nodes.sh" "$@"
                echo ""
                log "Restart seats to load them:  colossul-seats restart all"
+               ;;
+    models)    shift
+               exec "${COLOSSUL_LIB:-/opt/colossul}/install-models.sh" "$@"
                ;;
     provision) shift; exec /opt/colossul/provision.sh ;;
     rebuild)   shift; FORCE_REPROVISION=1 exec /opt/colossul/provision.sh ;;

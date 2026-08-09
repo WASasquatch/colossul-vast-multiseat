@@ -352,6 +352,19 @@ if [ -f "$ASSETS_ROOT/extra_model_paths.yaml" ]; then
     log "  also loading operator config: $ASSETS_ROOT/extra_model_paths.yaml"
 fi
 
+# Weights, if any were asked for. Strictly opt-in via MODEL_SETS: these sets run
+# to tens of gigabytes, and silently spending twenty minutes of a rented GPU's
+# time downloading them would be a nasty surprise. Seats start either way, so a
+# slow or failed download never blocks the instance coming up.
+if [ -n "${MODEL_SETS:-}" ]; then
+    log "Downloading model sets: $MODEL_SETS"
+    "${COLOSSUL_LIB}/install-models.sh" \
+        || warn "Model download reported problems — see above."
+else
+    log "No MODEL_SETS requested — skipping model downloads."
+    log "  Available sets:  colossul-seats models --list"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. Per-seat data directories
 # ─────────────────────────────────────────────────────────────────────────────

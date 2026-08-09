@@ -139,9 +139,10 @@ RUN set -euo pipefail; \
 # Our own scripts
 # ─────────────────────────────────────────────────────────────────────────────
 COPY scripts/ /opt/colossul/
-# The custom node manifest ships beside the scripts so an operator can edit it
-# in place on a running instance and re-run `colossul-seats nodes`.
+# The manifests ship beside the scripts so an operator can edit them in place on
+# a running instance and re-run `colossul-seats nodes` / `colossul-seats models`.
 COPY custom-nodes.txt /opt/colossul/custom-nodes.txt
+COPY models.txt /opt/colossul/models.txt
 RUN chmod +x /opt/colossul/*.sh /opt/colossul/bin/* && \
     ln -sf /opt/colossul/bin/colossul-seats /usr/local/bin/colossul-seats && \
     ln -sf /opt/colossul/bin/colossul-portal-config /usr/local/bin/colossul-portal-config && \

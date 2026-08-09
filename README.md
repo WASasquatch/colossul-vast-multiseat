@@ -356,6 +356,41 @@ All four seats share one `custom_nodes/`, so a node installed from one seat's
 Manager appears for everyone, and two artists installing simultaneously can
 conflict. Prefer the manifest for anything permanent.
 
+### Downloading models
+
+Declared in [`models.txt`](models.txt) as `<dest-path> <bytes> <url>`, grouped
+into named sets:
+
+```bash
+colossul-seats models --list          # what's defined, and how big
+colossul-seats models minimax-h3      # download that set (42.5 GB)
+MODEL_SETS=minimax-h3                 # or at provision time, in Docker Options
+```
+
+**Nothing downloads unless you name a set.** These run to tens of gigabytes on a
+metered rented box, and seats start whether or not the weights are there — a
+slow or failed download never blocks the instance coming up.
+
+Use canonical `huggingface.co/<repo>/resolve/main/...` URLs. Do **not** paste the
+`us.aws.cdn.hf.co` links the website hands you: those carry `Expires=` and
+`Signature=` and stop working within hours, so a manifest of them is broken by
+tomorrow. For gated repos, `export HF_TOKEN=hf_...` — it is read from the
+environment only and never written to the manifest.
+
+Downloads resume, so re-running after an interruption is cheap: anything already
+at its full size is skipped and partials continue where they stopped. The
+declared byte count does real work — it checks free disk *before* a 20 GB
+transfer starts, distinguishes "complete" from "truncated", and lets a
+half-written file be repaired instead of silently loading as a corrupt model.
+
+Downloads run one at a time on purpose. A single stream already saturates these
+instances (~70–90 MB/s observed), so concurrency buys nothing while making disk
+accounting and resume much harder to reason about.
+
+To add a model: find its file on HuggingFace, take the `resolve/main` URL, and
+add a line. The size is optional — `-` looks it up over the network — but
+declaring it is what makes the disk precheck meaningful.
+
 ### Models
 
 All seats read **one shared store**, so a 40 GB checkpoint costs 40 GB whether
