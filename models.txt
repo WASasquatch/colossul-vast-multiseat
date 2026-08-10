@@ -216,28 +216,34 @@ models/loras/qwen-image-edit-2511-multiple-angles-lora.safetensors  295140688  h
 [video-depth-anything]
 models/video_depth_anything/video_depth_anything_vitb.pth  458247082  https://huggingface.co/depth-anything/Video-Depth-Anything-Base/resolve/main/video_depth_anything_vitb.pth
 
-# ── Could NOT be resolved to a public URL ───────────────────────────────────
+# ── FusionX (12 workflows — our most-used model) ────────────────────────────
+# A community merge of Wan 2.1 14B with CausVid, AccVideo and MoviiGen. Both
+# builds live in ONE HuggingFace repo despite the repo being named for T2V, and
+# the odd trailing underscore in the T2V filename is upstream's, not a typo.
 #
-# Wan14BT2VFusioniX_fp16_.safetensors   (12 workflows — our most-used model)
-# Wan14Bi2vFusioniX_fp16.safetensors    (2 workflows)
-#     FusionX is a community merge published on Civitai, not HuggingFace. The
-#     mirrors that exist on HF are GGUF (wrong format for UNETLoader) or the
-#     VACE-merged build — and the VACE-merged one is NOT a substitute here,
-#     because these workflows load plain T2V FusionX alongside a separate
-#     Wan2_1-VACE_module. Civitai's API returned 403 then 503 during
-#     resolution, so nothing could be verified.
-#     Add with:  models/diffusion_models/<name>  <civitai download url>
-#     and set CIVITAI_TOKEN (see AUTHENTICATION above).
+# Not the GGUF mirrors (wrong format for UNETLoader), and not
+# QuantStack's VACE-merged build — these workflows load plain T2V FusionX
+# alongside a separate Wan2_1-VACE_module, so a merged file is not a substitute.
 #
-# gurrenlagannstyle_5B_e333.safetensors  (9 workflows)
-#     A style LoRA; no public HF match. Likely Civitai or trained in-house —
-#     worth checking which, given how many workflows use it.
+# 61.4 GB
+[wan21-fusionx]
+models/diffusion_models/Wan14BT2VFusioniX_fp16_.safetensors  28577792224  https://huggingface.co/vrgamedevgirl84/Wan14BT2VFusioniX/resolve/main/Wan14BT2VFusioniX_fp16_.safetensors
+models/diffusion_models/Wan14Bi2vFusioniX_fp16.safetensors  32791417192  https://huggingface.co/vrgamedevgirl84/Wan14BT2VFusioniX/resolve/main/Wan14Bi2vFusioniX_fp16.safetensors
+
+# Style LoRA, 9 workflows. Also on Civitai (model 1897405, version 2147817) but
+# the HuggingFace mirror carries the identical filename and needs no token.
+[gurren-lagann-style]
+models/loras/gurrenlagannstyle_5B_e333.safetensors  161292752  https://huggingface.co/UnifiedHorusRA/Gurren_Lagann___Anime_Style_Wan_2.2_14B_Lora/resolve/main/gurrenlagannstyle_5B_e333.safetensors
+
+# ── Still not provisioned, deliberately ─────────────────────────────────────
 #
 # 4x-UltraMix_Smooth.pth
-#     Bypassed in the only workflow that references it, so it is not blocking.
+#     Bypassed in the only workflow that references it, so nothing is waiting
+#     on it. Add if that node is ever switched back on.
 #
-# The Wan 2.1 checkpoint/VAE/encoder these need are already covered above, so
-# only the FusionX weights themselves are missing.
+# Custom character/style LoRAs (Gabe, Clayton, Quokka, northern_wastelands,
+# Wan2.2_BW_el, ...) are ours and are not published anywhere — they still have
+# to reach the instance some other way.
 
 
 # ═════════════════════════════════════════════════════════════════════════════
