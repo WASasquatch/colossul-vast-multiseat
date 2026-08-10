@@ -247,7 +247,7 @@ Restarting a stopped instance skips the app build and comes up in under a minute
 ### Step 4 — Hand out the URLs
 
 ```bash
-colossul-seats urls
+colossul urls
 ```
 
 Each seat has its own auto-created Cloudflare tunnel. Give each employee one
@@ -258,7 +258,7 @@ link — and see the sharing warning at the top of this README.
 No image rebuild, no new template:
 
 ```bash
-colossul-seats provision
+colossul provision
 ```
 
 That fetches the new commit, rebuilds, and **restarts the seats itself** when
@@ -273,14 +273,14 @@ while artists are working.
 ## Operating an instance
 
 ```bash
-colossul-seats status        # per-seat process state
-colossul-seats urls          # the URL for each employee
-colossul-seats logs 2        # tail seat 2's three services
-colossul-seats restart 2     # recycle one employee's stack
-colossul-seats restart all   # recycle every seat
-colossul-seats gpu           # nvidia-smi, annotated with seat ownership
-colossul-seats provision     # pull the latest commit and reload
-colossul-seats rebuild       # force a full rebuild, then reload
+colossul status        # per-seat process state
+colossul urls          # the URL for each employee
+colossul logs 2        # tail seat 2's three services
+colossul restart 2     # recycle one employee's stack
+colossul restart all   # recycle every seat
+colossul gpu           # nvidia-smi, annotated with seat ownership
+colossul provision     # pull the latest commit and reload
+colossul rebuild       # force a full rebuild, then reload
 ```
 
 Standard `supervisorctl` also works: seats are grouped as `seat0`…`seat3`, so
@@ -301,8 +301,8 @@ git ls-remote <repo> HEAD      # then paste the SHA after @ and re-test
 ```
 
 ```bash
-colossul-seats nodes          # after editing the manifest
-colossul-seats restart all    # then reload the seats
+colossul nodes          # after editing the manifest
+colossul restart all    # then reload the seats
 ```
 
 `Colossul_Studios_Nodes` is handled separately — it's copied from the private
@@ -362,10 +362,10 @@ Declared in [`models.txt`](models.txt) as `<dest-path> <bytes> <url>`, grouped
 into named sets:
 
 ```bash
-colossul-seats models --list          # what's defined, and how big
-colossul-seats models --check         # verify everything, download nothing
-colossul-seats models minimax-h3      # download that set (42.5 GB)
-colossul-seats models --all           # every set defined
+colossul models --list          # what's defined, and how big
+colossul models --check         # verify everything, download nothing
+colossul models minimax-h3      # download that set (42.5 GB)
+colossul models --all           # every set defined
 MODEL_SETS=minimax-h3                 # or at provision time, in Docker Options
 MODEL_SETS=all                        # …everything, including sets added later
 ```
@@ -388,7 +388,7 @@ or turn it off (`-e MODEL_SETS=`) from the template's Docker Options.
 **Downloads run behind the seats, not in front of them.** They're a supervised
 one-shot job started alongside the seats, so artists can work immediately while
 weights land. A workflow opened before its models arrive says "Missing Models" —
-reopening it later picks them up. Follow progress with `colossul-seats
+reopening it later picks them up. Follow progress with `colossul
 models-log`, or the **models** tab in the Instance Portal.
 
 > Put `ComfyUI_Assets` on a **persistent volume**. The download is
@@ -427,11 +427,11 @@ declaring it is what makes the disk precheck meaningful.
 ### Updating a running instance
 
 ```bash
-colossul-seats version              # what's installed here
-colossul-seats self-update --check  # what's new upstream, changes nothing
-colossul-seats self-update          # install it
-colossul-seats provision            # apply it
-colossul-seats restart all
+colossul version              # what's installed here
+colossul self-update --check  # what's new upstream, changes nothing
+colossul self-update          # install it
+colossul provision            # apply it
+colossul restart all
 ```
 
 Recreating an instance to pick up a script fix means a full re-provision — an
@@ -496,7 +496,7 @@ Source is fetched at boot, not baked into the image, so shipping a code change
 does not need an image rebuild:
 
 ```bash
-colossul-seats provision && colossul-seats restart all
+colossul provision && colossul restart all
 ```
 
 ---
@@ -547,10 +547,10 @@ Individually:
 |---|---|
 | `tests/check-parallelism.sh` | The core requirement: **N ComfyUI processes, one per GPU**, with distinct ports and distinct writable paths, and each backend/frontend resolving its ComfyUI from its own seat index. Fails if anything writable ever becomes shared. |
 | `tests/check-seat-argv.sh` | Runs the **real** seat scripts against a stub interpreter and asserts the exact argv and environment: no stray empty argument (argparse rejects one, and it stopped every seat from starting), correct per-seat ports/dirs/database, GPU pinning, `GPU_MAP`, glob safety, and that `COLOSSUL_ASSETS_ROOT` overrides actually take effect. |
-| `tests/check-update-path.sh` | That `colossul-seats provision` genuinely ships a change: the patched (always-dirty) tree doesn't block the update, the patch is re-applied afterwards, and seats are restarted so they serve the new build. |
+| `tests/check-update-path.sh` | That `colossul provision` genuinely ships a change: the patched (always-dirty) tree doesn't block the update, the patch is re-applied afterwards, and seats are restarted so they serve the new build. |
 | `tests/check-topology.sh` | Ports never collide (1–8 seats) **and never hit a base-image service**; generated supervisor units are valid INI with the right start order and real script paths; seats map to distinct GPUs; **the `PORTAL_CONFIG` baked into the Dockerfile and the port list in the docs both still match the port math**. |
 | `tests/check-args.sh` | The base image's `COMFYUI_ARGS` can never smuggle a `--port` into a seat; all nine seat-owned flags are stripped in both `--flag value` and `--flag=value` form; each seat still gets its own `--database-url`. |
-| `tests/check-tunnels.sh` | `colossul-seats urls` maps each seat to **its own** tunnel and never another seat's; an unmapped port yields empty rather than a wrong URL; malformed payloads degrade quietly. |
+| `tests/check-tunnels.sh` | `colossul urls` maps each seat to **its own** tunnel and never another seat's; an unmapped port yields empty rather than a wrong URL; malformed payloads degrade quietly. |
 | `tests/check-models.sh` | The generated `extra_model_paths.yaml` parses the way ComfyUI parses it and every path resolves to a real directory; all 25 v0.30 model folder types are covered; the three legacy aliases survive; `custom_nodes` is never redirected. |
 | `tests/check-patch.sh` | The upstream patch applies, produces valid TypeScript, honours `VITE_BACKEND_URL`, is idempotent, preserves line endings, and **fails loudly** if upstream moves. |
 
@@ -620,7 +620,7 @@ Keep the token short-expiry, read-only and single-repo accordingly.
 
 **ComfyUI Manager is shared.** Installing custom nodes from one seat's UI
 writes to the shared `custom_nodes/` and affects everyone, and concurrent
-installs from two seats can conflict. Prefer `colossul-seats provision`.
+installs from two seats can conflict. Prefer `colossul provision`.
 
 **Host RAM, not just VRAM.** Four ComfyUI processes each load their own copy of
 a model into system RAM. Size the instance for 4× the single-seat footprint;
@@ -642,7 +642,7 @@ colossul-vast-multiseat/
 │   ├── seat-backend.sh
 │   ├── seat-frontend.sh
 │   ├── lib/common.sh           # port math, GPU map, ComfyUI discovery, unit generation
-│   ├── bin/colossul-seats      # operator CLI
+│   ├── bin/colossul      # operator CLI
 │   ├── bin/colossul-portal-config
 │   └── patches/patch_vite_backend_url.py
 ├── tests/

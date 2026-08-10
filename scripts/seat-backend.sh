@@ -27,7 +27,7 @@ D="$(seat_dir "$SEAT")"
 
 BACKEND_DIR="$SRC_DIR/colossul-backend"
 [ -x "$BACKEND_DIR/.venv/bin/python" ] \
-    || die "seat $SEAT: backend venv missing at $BACKEND_DIR/.venv — run: colossul-seats provision"
+    || die "seat $SEAT: backend venv missing at $BACKEND_DIR/.venv — run: colossul provision"
 
 mkdir -p "$D/backend/outputs"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify the tunnel URL parser used by `colossul-seats urls`.
+# Verify the tunnel URL parser used by `colossul urls`.
 #
 # The base image's tunnel_manager opens a Cloudflare quick tunnel per portal
 # entry, so each seat has a public URL — but the endpoint only exists on a live
@@ -72,7 +72,7 @@ echo "PASS: 6 malformed payloads produce no output and no error"
 
 echo ""
 echo "=== 6. the access summary an operator actually reads ==="
-# Printed last at boot and by `colossul-seats urls`. If it is wrong or crashes,
+# Printed last at boot and by `colossul urls`. If it is wrong or crashes,
 # the operator has no assembled way to hand out links.
 tunnel_map() { printf '1111\thttps://portal.trycloudflare.com\n8190\thttps://seat0.trycloudflare.com\n'; }
 export PUBLIC_IPADDR=203.0.113.10 VAST_TCP_PORT_8200=40001

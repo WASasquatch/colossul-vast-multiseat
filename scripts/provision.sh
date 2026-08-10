@@ -2,7 +2,7 @@
 # Colossul multi-seat provisioner.
 #
 # Runs once at instance boot (via the colossul-provision supervisor unit) and
-# is safe to re-run by hand: `colossul-seats provision`.
+# is safe to re-run by hand: `colossul provision`.
 #
 # Responsibilities, in order:
 #   1. Discover the base image's ComfyUI install and Python.
@@ -259,7 +259,7 @@ if [ "$NEED_BUILD" = "1" ]; then
             warn "       git check-ignore -v colossul-frontend/src/lib/output-utils.ts"
             warn "A bare 'lib/' or 'build/' rule matches directories at ANY depth."
             warn "Fix: anchor the rule ('/lib/'), 'git add -f' the missing files, push,"
-            warn "then re-run: colossul-seats provision"
+            warn "then re-run: colossul provision"
             warn ""
         fi
         die "Frontend build failed in $FRONTEND_DIR (full log: $BUILD_LOG)"
@@ -317,7 +317,7 @@ fi
 
 # ── Custom nodes (Colossul + the manifest) ──────────────────────────────────
 # Delegated so an operator can re-run it alone after editing custom-nodes.txt,
-# without a full re-provision: colossul-seats nodes
+# without a full re-provision: colossul nodes
 log "Installing custom nodes..."
 "${COLOSSUL_LIB}/install-custom-nodes.sh" \
     || warn "Custom node installation reported problems — see above."
@@ -390,7 +390,7 @@ rm -f /etc/supervisor/conf.d/colossul-models.conf
 if [ -n "${MODEL_SETS:-}" ]; then
     write_models_unit /etc/supervisor/conf.d/colossul-models.conf "$MODEL_SETS"
     log "  model downloads queued as a background job: $MODEL_SETS"
-    log "  (seats do not wait for it; follow with: colossul-seats models-log)"
+    log "  (seats do not wait for it; follow with: colossul models-log)"
 else
     log "  MODEL_SETS is empty — no weights will be downloaded."
     log "  (set it in the template's Docker Options, e.g. -e MODEL_SETS=all)"
@@ -412,17 +412,17 @@ fi
 # Guarded so a transient hiccup here can't abort before the seats are started
 # and the access summary is printed.
 supervisorctl reread || warn "supervisorctl reread reported an error — continuing."
-supervisorctl update || warn "supervisorctl update reported an error — if a seat is missing, run: colossul-seats restart all"
+supervisorctl update || warn "supervisorctl update reported an error — if a seat is missing, run: colossul restart all"
 
 # `supervisorctl update` only (re)starts programs whose CONFIG changed. After a
 # source update the configs are identical, so without this the seats would keep
-# serving the old build and `colossul-seats provision` would look like it worked
+# serving the old build and `colossul provision` would look like it worked
 # while changing nothing.
 if [ "$SEATS_EXISTED" = "1" ] && [ "$NEED_BUILD" = "1" ]; then
     log "New build — restarting seats so they pick it up..."
     for ((i = 0; i < SEAT_COUNT; i++)); do
         supervisorctl restart "seat${i}:*" >/dev/null 2>&1 \
-            || warn "seat $i did not restart cleanly — check: colossul-seats logs $i"
+            || warn "seat $i did not restart cleanly — check: colossul logs $i"
     done
 fi
 
@@ -445,7 +445,7 @@ if wait_for_seats "$SEAT_COUNT" 150; then
     log "All seats are running."
 else
     warn "Not every seat reached RUNNING in time — the summary may be incomplete."
-    warn "Check with: colossul-seats status    (and: colossul-seats logs <n>)"
+    warn "Check with: colossul status    (and: colossul logs <n>)"
 fi
 
 # Tunnels are created asynchronously after each portal entry appears.

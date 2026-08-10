@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # Operator CLI for the Colossul multi-seat instance.
 #
-#   colossul-seats status          per-seat process state
-#   colossul-seats urls            the URL to hand each employee
-#   colossul-seats logs 2          tail seat 2's three services
-#   colossul-seats restart 2       recycle one employee's stack
-#   colossul-seats restart all     recycle every seat
-#   colossul-seats gpu             nvidia-smi, annotated with seat ownership
-#   colossul-seats nodes           re-install custom nodes (after editing the manifest)
-#   colossul-seats models-log      follow the background model download
-#   colossul-seats models --list   model sets available to download, and sizes
-#   colossul-seats models --check  verify URLs, sizes and disk, downloading nothing
-#   colossul-seats models minimax-h3   download that set into the shared store
-#   colossul-seats provision       re-run provisioning (picks up new commits)
-#   colossul-seats rebuild         force a full rebuild, then re-provision
-#   colossul-seats self-update     fetch newer Colossul scripts onto this box
-#   colossul-seats version         what is installed here
+#   colossul status          per-seat process state
+#   colossul urls            the URL to hand each employee
+#   colossul logs 2          tail seat 2's three services
+#   colossul restart 2       recycle one employee's stack
+#   colossul restart all     recycle every seat
+#   colossul gpu             nvidia-smi, annotated with seat ownership
+#   colossul nodes           re-install custom nodes (after editing the manifest)
+#   colossul models-log      follow the background model download
+#   colossul models --list   model sets available to download, and sizes
+#   colossul models --check  verify URLs, sizes and disk, downloading nothing
+#   colossul models minimax-h3   download that set into the shared store
+#   colossul provision       re-run provisioning (picks up new commits)
+#   colossul rebuild         force a full rebuild, then re-provision
+#   colossul self-update     fetch newer Colossul scripts onto this box
+#   colossul version         what is installed here
 set -euo pipefail
 
 # Resolve the shared lib from the installed location, falling back to the
@@ -51,7 +51,7 @@ cmd_status() {
     local i
     for ((i = 0; i < SEAT_COUNT; i++)); do
         echo "── seat $i  (GPU $(gpu_for_seat "$i")) ─────────────────────────────"
-        supervisorctl status "seat${i}:*" 2>/dev/null || echo "  not registered — run: colossul-seats provision"
+        supervisorctl status "seat${i}:*" 2>/dev/null || echo "  not registered — run: colossul provision"
     done
 }
 
@@ -108,7 +108,7 @@ case "${1:-}" in
     nodes)     shift
                "${COLOSSUL_LIB:-/opt/colossul}/install-custom-nodes.sh" "$@"
                echo ""
-               log "Restart seats to load them:  colossul-seats restart all"
+               log "Restart seats to load them:  colossul restart all"
                ;;
     models)    shift
                exec "${COLOSSUL_LIB:-/opt/colossul}/install-models.sh" "$@"

@@ -28,7 +28,7 @@ BACKEND_PORT="$(backend_int "$SEAT")"
 
 FRONTEND_DIR="$SRC_DIR/colossul-frontend"
 [ -f "$FRONTEND_DIR/dist/index.html" ] \
-    || die "seat $SEAT: frontend not built at $FRONTEND_DIR/dist — run: colossul-seats provision"
+    || die "seat $SEAT: frontend not built at $FRONTEND_DIR/dist — run: colossul provision"
 
 export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
 

@@ -70,7 +70,7 @@ sits there doing nothing.
 
 So you do **not** lose file management. Jupyter gives a file browser, an editor,
 upload/download, and a **terminal that is a full root `bash` shell** — which is
-also where you run `colossul-seats`. What you give up is Vast's own SSH/`scp`.
+also where you run `colossul`. What you give up is Vast's own SSH/`scp`.
 
 Keeping port **8080** in the port list is therefore not optional if you want any
 way into the box. See [Who can reach Jupyter](#who-can-reach-jupyter).
@@ -113,7 +113,7 @@ Three options:
 | Option | Effect |
 |---|---|
 | **Keep 8080 exposed** (default) | Everyone can reach Jupyter. Fine for a trusted in-house team; assume the token is readable by anyone with a seat. |
-| **Drop 8080 from the port list** | Nobody can reach Jupyter — **including you**. No terminal, no file manager, no `colossul-seats`. Only choose this if you never need to touch the box. |
+| **Drop 8080 from the port list** | Nobody can reach Jupyter — **including you**. No terminal, no file manager, no `colossul`. Only choose this if you never need to touch the box. |
 | **Set a separate `WEB_PASSWORD`** and hand seat URLs out as portal links only | Slightly raises the bar, but the token is still in the link. Not real isolation. |
 
 Given the brief — a trusted internal team — the default is reasonable. Just
@@ -261,7 +261,7 @@ outlive the instance.
 | supervisord starts, `/.provisioning` held | seconds | Logs tab |
 | Your `PROVISIONING_SCRIPT` (model downloads) | yours | Logs tab |
 | Colossul provisioning: clone → `uv sync` → `npm ci` → `vite build` | **10–20 min** | Logs tab, `[colossul]` lines |
-| 4 seats start | ~1 min | `colossul-seats status` |
+| 4 seats start | ~1 min | `colossul status` |
 
 Only the last two are ours. A stopped-and-restarted instance skips the build
 entirely and is up in under a minute.
@@ -298,7 +298,7 @@ opens one for every entry in `/etc/portal.yaml`, which is generated from
 so collect them after the instance is up:
 
 ```bash
-colossul-seats urls        # queries tunnel_manager for the live tunnel per seat
+colossul urls        # queries tunnel_manager for the live tunnel per seat
 ```
 
 Or open the Instance Portal (port 1111) for the same links, labelled per seat.
@@ -320,7 +320,7 @@ remain separate.
 
 | What changed | How it reaches a running instance |
 |---|---|
-| **Storyrendr source** (the app) | Automatically on every boot. **STOP → START**, or `colossul-seats provision` for no downtime. |
+| **Storyrendr source** (the app) | Automatically on every boot. **STOP → START**, or `colossul provision` for no downtime. |
 | **This image** (seat scripts, ports, `OPEN_BUTTON_PORT`, CUDA base) | **Not at all.** Destroy and rent again. |
 
 The image is fixed at instance *creation*. Stop/start reuses the existing
@@ -330,7 +330,7 @@ That split is deliberate: the app is fetched at runtime precisely so day-to-day
 code changes never require an image rebuild, a new template, or a new instance.
 Only changes to the launch machinery itself do.
 
-`colossul-seats provision` is the no-downtime path: it fetches, rebuilds only if
+`colossul provision` is the no-downtime path: it fetches, rebuilds only if
 the commit moved, and restarts seats **only** when a new build actually landed —
 so it's safe to run while artists are working.
 
@@ -385,7 +385,7 @@ git check-ignore -v colossul-frontend/src/lib/output-utils.ts
 ```
 
 Fix: anchor the rule to the repo root (`/lib/`), force-add the missing files,
-push, then re-run `colossul-seats provision` on the instance. Find every victim
+push, then re-run `colossul provision` on the instance. Find every victim
 with:
 
 ```bash
@@ -394,7 +394,7 @@ git status --porcelain --ignored=matching | grep '^!!'
 
 **Provisioning failed with a token error.** `GITHUB_TOKEN` is missing, expired,
 or lacks read access to the repo. Fix it in the template and restart, or set it
-in the shell and run `colossul-seats provision`.
+in the shell and run `colossul provision`.
 
 **A seat is missing from the portal / has no tunnel.** Its external port isn't
 in the template's port list. Caddy only proxies an entry when Vast has set
@@ -405,7 +405,7 @@ boot and cannot be extended in place.
 
 **A seat's frontend crash-loops.** Usually a port collision: `--strictPort`
 makes Vite fail loudly rather than quietly moving to another seat's port. Check
-`colossul-seats logs <n>` and confirm no stray process holds the port.
+`colossul logs <n>` and confirm no stray process holds the port.
 
 **All seats show the same projects.** The `vite.config.ts` patch did not apply.
 Check the provisioning log for `[patch]`, and run `tests/check-patch.sh`
@@ -420,7 +420,7 @@ base image relocated ComfyUI, set `COMFYUI_HOME` explicitly.
 ComfyUI's own naming (`checkpoints`, `loras`, `text_encoders`, …). Confirm the
 seat actually loaded the config — its startup log lists the extra model paths —
 and that the file exists at `/etc/colossul/extra_model_paths.yaml`. Regenerate
-with `colossul-seats provision`. Weights added to the store are picked up
+with `colossul provision`. Weights added to the store are picked up
 without a restart; a *new folder type* is not.
 
 **Everything lands on GPU 0.** `nvidia-smi` inside the container should list all

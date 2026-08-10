@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Pull newer Colossul scripts and manifests onto a RUNNING instance.
 #
-#   colossul-seats self-update            take the latest main
-#   colossul-seats self-update <ref>      take a tag, branch or commit
-#   colossul-seats self-update --check    show what is new, change nothing
+#   colossul self-update            take the latest main
+#   colossul self-update <ref>      take a tag, branch or commit
+#   colossul self-update --check    show what is new, change nothing
 #
 # Why this exists: destroying and recreating an instance to pick up a script fix
 # costs a full re-provision — and on a box that has pulled hundreds of gigabytes
@@ -46,7 +46,7 @@ REF="main"
 case "${1:-}" in
     --check|-n) CHECK_ONLY=1; REF="${2:-main}" ;;
     "")         ;;
-    -*)         die "usage: colossul-seats self-update [--check] [ref]" ;;
+    -*)         die "usage: colossul self-update [--check] [ref]" ;;
     *)          REF="$1" ;;
 esac
 
@@ -82,7 +82,7 @@ fi
 
 if [ "$CHECK_ONLY" = "1" ]; then
     log "--check: nothing was changed."
-    log "Apply with:  colossul-seats self-update $REF"
+    log "Apply with:  colossul self-update $REF"
     exit 0
 fi
 
@@ -115,15 +115,18 @@ for m in custom-nodes.txt models.txt; do
     [ -f "$WORK/repo/$m" ] && cp -f "$WORK/repo/$m" "$INSTALL_DIR/$m"
 done
 chmod +x "$INSTALL_DIR"/*.sh "$INSTALL_DIR"/bin/* 2>/dev/null
-ln -sf "$INSTALL_DIR/bin/colossul-seats" /usr/local/bin/colossul-seats
+ln -sf "$INSTALL_DIR/bin/colossul" /usr/local/bin/colossul
+# Old name kept as an alias: instances provisioned before the rename, and any
+# note or runbook written then, still say colossul-seats.
+ln -sf "$INSTALL_DIR/bin/colossul" /usr/local/bin/colossul-seats
 ln -sf "$INSTALL_DIR/bin/colossul-portal-config" /usr/local/bin/colossul-portal-config
 echo "$NEW" > "$STAMP"
 
 log "Updated to $NEW"
 echo ""
 log "Nothing is running the new code yet. To apply it:"
-log "    colossul-seats provision        re-run provisioning (nodes, units, config)"
-log "    colossul-seats restart all      restart the seats"
+log "    colossul provision        re-run provisioning (nodes, units, config)"
+log "    colossul restart all      restart the seats"
 log ""
 log "Both are safe to re-run: node clones and model downloads skip what is"
 log "already present. Roll back with:  rm -rf $INSTALL_DIR && mv $BACKUP $INSTALL_DIR"

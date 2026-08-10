@@ -253,7 +253,7 @@ run this from the Jupyter terminal instead — it only restarts seats if there w
 actually something new:
 
 ```bash
-colossul-seats provision
+colossul provision
 ```
 
 ### Server image changes (our launch scripts, ports, CUDA version) — new server
@@ -443,7 +443,7 @@ instance.
 
 **An artist says their workstation is frozen.**
 The producer can restart just that one without disturbing the others. Ask your
-admin — it's one command (`colossul-seats restart 2`).
+admin — it's one command (`colossul restart 2`).
 
 ---
 

@@ -13,7 +13,7 @@
 #              downloads. Pinning it only saves one HEAD request per file, and
 #              turns a file that silently changed upstream into a visible error.
 #              Fill them all in automatically with:
-#                  colossul-seats models --sizes > models.txt.new
+#                  colossul models --sizes > models.txt.new
 #   url        direct download URL.
 #
 #              Use canonical huggingface.co/<repo>/resolve/main/... links.
@@ -29,25 +29,25 @@
 #
 # ── COMMANDS ────────────────────────────────────────────────────────────────
 #
-#   colossul-seats models --list
+#   colossul models --list
 #       Every set defined here, its file count and total size. Instant, offline.
 #
-#   colossul-seats models --check [set...]
+#   colossul models --check [set...]
 #       Resolve every URL, compare the server's size against this file, and
 #       check free disk — without transferring a byte. Exits non-zero if
 #       anything is wrong, so it can gate a script. With no set named, checks
 #       all of them. Run this first: a dead link or gated repo shows up in
 #       seconds instead of twenty minutes into a 40 GB download.
 #
-#   colossul-seats models minimax-h3
+#   colossul models minimax-h3
 #       DOWNLOAD that set. Several may be named at once:
-#           colossul-seats models minimax-h3 minimax-h3-ref2va
+#           colossul models minimax-h3 minimax-h3-ref2va
 #
-#   colossul-seats models --all
-#       Download every set defined here. `colossul-seats models all` is the
+#   colossul models --all
+#       Download every set defined here. `colossul models all` is the
 #       same thing. Check the total with --list first.
 #
-#   colossul-seats models --sizes > /tmp/models.new
+#   colossul models --sizes > /tmp/models.new
 #       Print this file with every omitted byte count filled in from the
 #       server, so sizes can be pinned without collecting them by hand.
 #

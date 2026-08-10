@@ -141,8 +141,8 @@ case "${1:-}" in
         echo "Model sets defined in $(basename "$MANIFEST"):"
         list_sets
         echo ""
-        echo "  Download one:   colossul-seats models <set>"
-        echo "  Download all:   colossul-seats models --all"
+        echo "  Download one:   colossul models <set>"
+        echo "  Download all:   colossul models --all"
         echo "  At boot time:   MODEL_SETS=<set>[,<set>...]   or   MODEL_SETS=all"
         echo ""
         exit 0
@@ -150,7 +150,7 @@ case "${1:-}" in
     --sizes)
         # Print the manifest with every omitted size filled in, so sizes can be
         # pinned without anyone hand-collecting byte counts:
-        #     colossul-seats models --sizes > models.txt.new
+        #     colossul models --sizes > models.txt.new
         shift
         while IFS= read -r line; do
             trimmed="${line#"${line%%[![:space:]]*}"}"
@@ -199,7 +199,7 @@ if [ "${#WANT[@]}" -eq 0 ]; then
     log "No model sets requested — nothing to download."
     log "  Available:"
     list_sets
-    log "  Request one with: colossul-seats models <set>   (or MODEL_SETS=<set>)"
+    log "  Request one with: colossul models <set>   (or MODEL_SETS=<set>)"
     exit 0
 fi
 
@@ -304,7 +304,7 @@ if [ "$CHECK_ONLY" = "1" ]; then
     echo ""
     if [ "$problems" -eq 0 ]; then
         log "All checks passed. Download for real with:"
-        log "    colossul-seats models ${WANT[*]}"
+        log "    colossul models ${WANT[*]}"
         exit 0
     fi
     warn "$problems problem(s) above — fix these before downloading."
@@ -565,7 +565,7 @@ if [ "${#FAILED[@]}" -gt 0 ]; then
     warn "${#FAILED[@]} file(s) did not complete:"
     for f in "${FAILED[@]}"; do warn "    $f"; done
     warn "Re-run to resume — completed files are skipped and partials continue:"
-    warn "    colossul-seats models ${WANT[*]}"
+    warn "    colossul models ${WANT[*]}"
     warn "If a repo is gated, set HF_TOKEN and re-run."
 fi
 exit 0

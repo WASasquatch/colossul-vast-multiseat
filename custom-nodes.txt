@@ -14,7 +14,7 @@
 # parallel, then each pack's requirements.txt is installed SEQUENTIALLY into the
 # shared venv (concurrent pip into one venv corrupts it).
 #
-# Edit and re-run:  colossul-seats nodes
+# Edit and re-run:  colossul nodes
 # Skip entirely:    SKIP_CUSTOM_NODES=1
 #
 # ── Derived from your workflows ─────────────────────────────────────────────

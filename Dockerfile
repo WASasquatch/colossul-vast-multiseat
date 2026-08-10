@@ -67,7 +67,7 @@ ENV ENABLE_COMFYUI_MANAGER=1
 # whole studio library, so any workflow opens with its weights already present.
 #
 # Two things to know:
-#   - This is a LOT of data (see `colossul-seats models --list`). The download
+#   - This is a LOT of data (see `colossul models --list`). The download
 #     runs as a background job behind the seats, so artists can work while it
 #     lands, but a workflow opened early may still report Missing Models.
 #   - It is skip-if-complete. If ComfyUI_Assets lives on a persistent volume,
@@ -153,11 +153,12 @@ RUN set -euo pipefail; \
 # ─────────────────────────────────────────────────────────────────────────────
 COPY scripts/ /opt/colossul/
 # The manifests ship beside the scripts so an operator can edit them in place on
-# a running instance and re-run `colossul-seats nodes` / `colossul-seats models`.
+# a running instance and re-run `colossul nodes` / `colossul models`.
 COPY custom-nodes.txt /opt/colossul/custom-nodes.txt
 COPY models.txt /opt/colossul/models.txt
 RUN chmod +x /opt/colossul/*.sh /opt/colossul/bin/* && \
-    ln -sf /opt/colossul/bin/colossul-seats /usr/local/bin/colossul-seats && \
+    ln -sf /opt/colossul/bin/colossul /usr/local/bin/colossul && \
+    ln -sf /opt/colossul/bin/colossul /usr/local/bin/colossul-seats && \
     ln -sf /opt/colossul/bin/colossul-portal-config /usr/local/bin/colossul-portal-config && \
     mkdir -p /etc/colossul /var/log/portal
 

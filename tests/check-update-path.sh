@@ -3,7 +3,7 @@
 #
 # Provisioning patches vite.config.ts in the working tree, so the checkout is
 # permanently dirty. `git checkout` refuses to overwrite a modified file, which
-# made `colossul-seats provision` fetch the new commit, fail to apply it, warn,
+# made `colossul provision` fetch the new commit, fail to apply it, warn,
 # and leave the instance serving old code — a silent no-op that looks like a
 # successful update. These tests pin down the reset-based behaviour instead.
 set -euo pipefail
