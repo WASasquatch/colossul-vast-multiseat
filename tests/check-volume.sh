@@ -52,6 +52,30 @@ echo "  both seat data and models moved to the volume with no configuration"
 echo "PASS: volume-first by default"
 
 echo ""
+echo "=== 3b. a volume mounted AS the workspace is recognised ==="
+# Vast volumes can replace /workspace rather than appearing at /data. The paths
+# are then already correct, but persistence must still be reported correctly —
+# keying off the mount point would tell a perfectly safe instance that all its
+# data dies with it, which is the worst possible false alarm.
+mkdir -p "$VOL/ws"
+out="$(paths_with WORKSPACE="$VOL/ws")"
+grep -q "vol=$VOL/ws" <<< "$out" \
+    || fail "a volume mounted as the workspace was not recognised as persistent: $out"
+grep -q "assets=$VOL/ws/ComfyUI_Assets" <<< "$out" || fail "paths should be unchanged: $out"
+echo "  workspace-as-volume detected, default paths unchanged"
+
+# …and the persistence notice must agree with it.
+out="$(env -i PATH="$PATH" HOME="$HOME" COLOSSUL_LIB="$ROOT/scripts" \
+        WORKSPACE="$VOL/ws" bash -c \
+        'source "$COLOSSUL_LIB/lib/common.sh"; print_model_status')"
+grep -q 'models    on a separate volume' <<< "$out" \
+    || fail "storage notice contradicts detection for workspace-as-volume: $out"
+grep -q 'CONTAINER DISK' <<< "$out" \
+    && fail "reported data as doomed when it is on a volume: $out"
+echo "  storage notice agrees: survives instance destroy"
+echo "PASS: persistence is decided by filesystem, not by mount point"
+
+echo ""
 echo "=== 4. explicit settings still win ==="
 out="$(paths_with WORKSPACE="$T/w" COLOSSUL_VOLUME="$VOL" \
         COLOSSUL_ROOT=/pinned/root COLOSSUL_ASSETS_ROOT=/pinned/assets)"
@@ -66,8 +90,13 @@ echo "=== 5. provisioning warns about data stranded on container disk ==="
 # worse, an artist's saved workflows.
 grep -q 'still on container disk' "$ROOT/scripts/provision.sh" \
     || fail "provisioning should warn when an earlier run's data is left behind"
-grep -q 'No volume attached' "$ROOT/scripts/provision.sh" \
+grep -q 'No volume detected' "$ROOT/scripts/provision.sh" \
     || fail "provisioning should say plainly when nothing is persistent"
+# The stray-data warning must not fire when the volume IS the workspace: there
+# is nothing left behind in that case, and the mv it suggests would be a no-op
+# that reads like a real problem.
+grep -q 'COLOSSUL_VOLUME_ROOT" != "$WORKSPACE' "$ROOT/scripts/provision.sh" \
+    || fail "stray-data warning should be skipped when the volume replaces the workspace"
 echo "PASS: stranded data is reported"
 
 echo ""

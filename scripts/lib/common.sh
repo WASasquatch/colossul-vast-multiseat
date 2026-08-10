@@ -33,12 +33,37 @@ die()  { echo "[colossul] ERROR: $*" >&2; exit 1; }
 # A candidate only counts if it is a genuinely different filesystem from /.
 # Otherwise it is just a directory on container disk wearing a volume's name,
 # and using it would produce a false sense of durability.
+# Does this path live on something other than the container's own filesystem?
+#
+# This is the ONLY reliable test for "will it survive the instance being
+# destroyed". Where a volume gets mounted varies — Vast's own docs say /data for
+# GUI templates, but a volume can equally replace /workspace, in which case the
+# default paths are already persistent and nothing needs to move. Deciding by
+# mount point would then report a perfectly safe instance as doomed.
+path_is_persistent() {
+    local p="$1" parent pdev rdev
+    # Walk up to the nearest ancestor that exists. The directory itself may not
+    # have been created yet — this is called before provisioning makes it, and
+    # the question is where it WOULD land, not whether it is there already.
+    while [ -n "$p" ] && [ "$p" != "/" ] && [ ! -e "$p" ]; do
+        parent="${p%/*}"
+        [ "$parent" = "$p" ] && break
+        p="${parent:-/}"
+    done
+    [ -e "$p" ] || return 1
+    pdev="$(df -P "$p" 2>/dev/null | awk 'NR==2 {print $1}')"
+    rdev="$(df -P / 2>/dev/null | awk 'NR==2 {print $1}')"
+    [ -n "$pdev" ] && [ "$pdev" != "$rdev" ]
+}
+
 colossul_volume_root() {
-    local cand root_dev
-    root_dev="$(df -P / 2>/dev/null | awk 'NR==2 {print $1}')"
-    for cand in ${COLOSSUL_VOLUME:+"$COLOSSUL_VOLUME"} /data /mnt/data /volume; do
+    local cand
+    # $WORKSPACE last: if the volume replaced it, the defaults are already right
+    # and this only supplies the label for the log line.
+    for cand in ${COLOSSUL_VOLUME:+"$COLOSSUL_VOLUME"} /data /mnt/data /volume \
+                "${WORKSPACE:-/workspace}"; do
         [ -d "$cand" ] && [ -w "$cand" ] || continue
-        [ "$(df -P "$cand" 2>/dev/null | awk 'NR==2 {print $1}')" != "$root_dev" ] || continue
+        path_is_persistent "$cand" || continue
         printf '%s\n' "$cand"
         return 0
     done
@@ -605,17 +630,13 @@ print_model_status() {
     # a separate mount; container disk is not. Worth stating, because the
     # difference is invisible until someone destroys an instance and loses both
     # the library and every artist's saved workflow.
-    local assets_dev root_dev container_dev
-    assets_dev="$(df -P "$ASSETS_ROOT" 2>/dev/null | awk 'NR==2 {print $1}')"
-    root_dev="$(df -P "${COLOSSUL_ROOT:-/workspace}" 2>/dev/null | awk 'NR==2 {print $1}')"
-    container_dev="$(df -P / 2>/dev/null | awk 'NR==2 {print $1}')"
     echo "  STORAGE"
-    if [ -n "$assets_dev" ] && [ "$assets_dev" != "$container_dev" ]; then
+    if path_is_persistent "$ASSETS_ROOT"; then
         echo "      models    on a separate volume — survives instance destroy"
     else
         echo "      models    on CONTAINER DISK — lost when this instance is destroyed"
     fi
-    if [ -n "$root_dev" ] && [ "$root_dev" != "$container_dev" ]; then
+    if path_is_persistent "${COLOSSUL_ROOT:-/workspace}"; then
         echo "      seat data on a separate volume — survives instance destroy"
     else
         echo "      seat data on CONTAINER DISK — saved workflows, outputs and"

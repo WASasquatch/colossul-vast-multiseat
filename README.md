@@ -476,10 +476,13 @@ elsewhere. That's the trade for not re-downloading.
 
 #### Using one — no configuration needed
 
-**Attach a volume and the image uses it automatically.** On boot it looks for a
-mount at `/data`, `/mnt/data` or `/volume` that is a genuinely different
-filesystem from `/`, and if it finds one, both the model library and all
-per-seat data go there instead of onto container disk. Nothing to set.
+**Attach a volume and the image uses it automatically.** Persistence is decided
+by *filesystem*, not by mount point: any path sitting on something other than
+the container's own filesystem is durable. That covers both layouts Vast
+produces — a volume mounted alongside the workspace (`/data`, `/mnt/data`,
+`/volume`), and a volume mounted **as** `/workspace`, which is a drop-in
+replacement where the default paths are already on it. Either way the library
+and all per-seat data land on the volume, and the READY block reports which.
 
 **Renting the first time**
 
@@ -489,8 +492,8 @@ per-seat data go there instead of onto container disk. Nothing to set.
    the library plus working room. `colossul models --list` gives the current
    total; ~600 GB suits 414 GB of weights plus outputs. **It cannot be resized
    later**, so err large.
-3. Rent. The volume mounts at `/data` and provisioning logs
-   `Volume detected at /data`.
+3. Rent. Provisioning logs `Volume detected at <path>` wherever it mounted, and
+   the READY block confirms both trees survive a destroy.
 
 **Re-renting later, keeping everything**
 

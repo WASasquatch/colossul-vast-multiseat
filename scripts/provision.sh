@@ -345,16 +345,21 @@ fi
 # tree is now invisible to the seats — announcing it beats an artist discovering
 # their workflows are "gone" when they were only left behind.
 if [ -n "${COLOSSUL_VOLUME_ROOT:-}" ]; then
-    log "Volume detected at $COLOSSUL_VOLUME_ROOT — models and seat data will survive instance destroy."
-    for stray in "$WORKSPACE/ComfyUI_Assets" "$WORKSPACE/colossul"; do
-        [ -d "$stray" ] || continue
-        [ -n "$(ls -A "$stray" 2>/dev/null)" ] || continue
-        warn "  Data from an earlier run is still on container disk: $stray"
-        warn "  It is NOT being used now, and it dies with this instance. Move it:"
-        warn "      mv $stray/* ${COLOSSUL_VOLUME_ROOT}/$(basename "$stray")/"
-    done
+    log "Volume detected at $COLOSSUL_VOLUME_ROOT — models and seat data survive instance destroy."
+    # Only meaningful when the volume is somewhere OTHER than the workspace. A
+    # volume mounted as /workspace is a drop-in replacement: the default paths
+    # are already on it, and there is nothing left behind to move.
+    if [ "$COLOSSUL_VOLUME_ROOT" != "$WORKSPACE" ]; then
+        for stray in "$WORKSPACE/ComfyUI_Assets" "$WORKSPACE/colossul"; do
+            [ -d "$stray" ] || continue
+            [ -n "$(ls -A "$stray" 2>/dev/null)" ] || continue
+            warn "  Data from an earlier run is still on container disk: $stray"
+            warn "  It is NOT being used now, and it dies with this instance. Move it:"
+            warn "      mv $stray/* ${COLOSSUL_VOLUME_ROOT}/$(basename "$stray")/"
+        done
+    fi
 else
-    log "No volume attached — models and seat data live on container disk"
+    log "No volume detected — models and seat data live on container disk"
     log "  and are LOST when this instance is destroyed. See 'Persistent storage'"
     log "  in the README; attaching a volume needs no configuration."
 fi
