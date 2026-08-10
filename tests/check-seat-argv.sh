@@ -101,7 +101,30 @@ rm -f "$T/argv.txt"
 touch "$T/comfy/loot1" "$T/comfy/loot2"
 run_seat COLOSSUL_COMFYUI_ARGS='*'
 grep -qxF 'loot1' "$T/argv.txt" && fail "extras were glob-expanded against the ComfyUI directory"
-echo "PASS: '*' passed through literally, not expanded"
+
+echo ""
+echo "=== --cache-ram scales with seat count, and is overridable ==="
+# ComfyUI's --cache-ram defaults assume it is the only ComfyUI on the box: it
+# evicts cache only once free RAM drops below 10 GB. With four seats sharing one
+# host, whoever needs memory at that moment meets the OOM killer first.
+run_seat
+expect_pair '--cache-ram' '32'   # 8 GB x NUM_SEATS(4)
+
+# An operator must be able to tune it, including the two-value form.
+run_seat COLOSSUL_CACHE_RAM="6 40"
+expect_pair '--cache-ram' '6'
+grep -qxF -- '40' "$T/argv.txt" \
+    || fail "the second --cache-ram value did not reach argv: $(tr '\n' ' ' < "$T/argv.txt")"
+echo "  two-value form passes through"
+
+# …and to opt out entirely, back to ComfyUI's own defaults.
+run_seat COLOSSUL_CACHE_RAM=""
+grep -qxF -- '--cache-ram' "$T/argv.txt" \
+    && fail "COLOSSUL_CACHE_RAM= should leave ComfyUI's own defaults alone"
+grep -qxF '' "$T/argv.txt" \
+    && fail "opting out left an empty argument in argv, which argparse rejects"
+echo "  COLOSSUL_CACHE_RAM= restores ComfyUI's defaults, with no empty arg"
+echo "PASS: RAM cache threshold is seat-aware and tunable"
 
 echo ""
 echo "=== 6. the shared model store is passed when present ==="

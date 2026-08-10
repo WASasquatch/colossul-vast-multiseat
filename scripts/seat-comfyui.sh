@@ -78,6 +78,34 @@ else
     log "seat $SEAT: ComfyUI-Manager disabled (ENABLE_COMFYUI_MANAGER=0)"
 fi
 
+# ── Host RAM, shared by every seat ──────────────────────────────────────────
+# ComfyUI's node cache evicts based on how much RAM is FREE, not on how much it
+# has cached: --cache-ram takes headroom thresholds, and ram_release() frees
+# entries until psutil available >= target. Both numbers are GB of free RAM to
+# maintain — the first before evicting current-workflow entries, the second
+# before evicting older ones.
+#
+# The defaults are computed for a machine running one ComfyUI:
+#     active   = min(10, max(2, total_ram * 0.10))   -> 10 GB on a 256 GB box
+#     inactive = min(128, total_ram)                 -> 128 GB
+#
+# All seats read the same system-wide figure, so they do back off together — but
+# a 10 GB floor is far too tight when four processes must each still allocate
+# while freeing. Whoever needs a buffer at that moment meets the OOM killer
+# first. Scale the active threshold with the number of seats instead.
+#
+# Set COLOSSUL_CACHE_RAM to override ("active inactive", or "" to leave ComfyUI's
+# own defaults alone).
+CACHE_ARGS=()
+if [ -n "${COLOSSUL_CACHE_RAM+x}" ]; then
+    # Explicitly set, possibly to empty: honour it exactly.
+    [ -n "$COLOSSUL_CACHE_RAM" ] && read -r -a CACHE_ARGS <<< "--cache-ram $COLOSSUL_CACHE_RAM"
+elif [ "$(num_seats)" -gt 1 ]; then
+    _active=$(( 8 * $(num_seats) ))
+    CACHE_ARGS=(--cache-ram "$_active")
+    log "seat $SEAT: keeping ${_active}GB RAM free before evicting cache ($(num_seats) seats share this host)"
+fi
+
 log "seat $SEAT: ComfyUI on GPU $GPU -> 127.0.0.1:$PORT"
 
 cd "$COMFYUI_HOME"
@@ -87,6 +115,7 @@ exec "$COMFYUI_PYTHON" main.py \
     --disable-auto-launch \
     --enable-cors-header \
     ${MANAGER_ARGS[@]+"${MANAGER_ARGS[@]}"} \
+    ${CACHE_ARGS[@]+"${CACHE_ARGS[@]}"} \
     --input-directory  "$D/comfyui/input" \
     --output-directory "$D/comfyui/output" \
     --temp-directory   "$D/comfyui/temp" \

@@ -7,6 +7,7 @@
 #   colossul restart 2       recycle one employee's stack
 #   colossul restart all     recycle every seat
 #   colossul gpu             nvidia-smi, annotated with seat ownership
+#   colossul ram             host RAM, and what each seat is actually using
 #   colossul nodes           re-install custom nodes (after editing the manifest)
 #   colossul models-log      follow the background model download
 #   colossul models --list   model sets available to download, and sizes
@@ -99,8 +100,37 @@ cmd_gpu() {
     nvidia-smi
 }
 
+# "98% used" on the Vast dashboard is usually page cache from reading hundreds
+# of gigabytes of weights, which the kernel hands back on demand. The number
+# that matters is `available`, and which processes hold ANONYMOUS memory.
+cmd_ram() {
+    echo ""
+    echo "  Host memory (available is the number that matters — used includes"
+    echo "  reclaimable page cache from reading model files):"
+    free -h | sed 's/^/    /'
+    echo ""
+    echo "  Per-seat ComfyUI resident memory:"
+    printf '    %-6s %-10s %-10s %s\n' "SEAT" "RSS" "PID" "STATE"
+    local i pid rss
+    for ((i = 0; i < SEAT_COUNT; i++)); do
+        pid="$(supervisorctl pid "seat${i}-comfyui" 2>/dev/null || echo 0)"
+        if [ "${pid:-0}" -gt 0 ] 2>/dev/null; then
+            rss="$(awk '/VmRSS/{printf "%.1f GB", $2/1048576}' "/proc/$pid/status" 2>/dev/null)"
+            printf '    %-6s %-10s %-10s %s\n' "$i" "${rss:-?}" "$pid" "running"
+        else
+            printf '    %-6s %-10s %-10s %s\n' "$i" "-" "-" "not running"
+        fi
+    done
+    echo ""
+    echo "  Cache eviction threshold: ComfyUI frees cached node outputs once"
+    echo "  free RAM drops below ${COLOSSUL_CACHE_RAM:-$((8 * SEAT_COUNT))} GB."
+    echo "  Tune with COLOSSUL_CACHE_RAM (\"active\" or \"active inactive\", GB)."
+    echo ""
+}
+
 case "${1:-}" in
     status)    shift; cmd_status "$@" ;;
+    ram)       shift; cmd_ram "$@" ;;
     urls)      shift; cmd_urls "$@" ;;
     logs)      shift; cmd_logs "$@" ;;
     restart)   shift; cmd_restart "$@" ;;

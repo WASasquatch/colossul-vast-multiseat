@@ -452,6 +452,38 @@ and the Dockerfile `ENV` defaults (`COMFYUI_REF`, `MODEL_SETS`,
 `ENABLE_COMFYUI_MANAGER`) — the values already in the container's environment
 stay as they are. For those, rent a new instance on a newer image tag.
 
+### Host RAM
+
+Four ComfyUI processes share one machine's RAM, and ComfyUI's defaults assume
+it's the only one on the box.
+
+`--cache-ram` takes **headroom** thresholds — GB of free RAM to *maintain*, not
+a cap on what may be cached. `ram_release()` frees cached node outputs until
+`psutil.virtual_memory().available >= target`. Its defaults:
+
+```
+active   = min(10, max(2, total_ram * 0.10))   ->  10 GB on a 256 GB box
+inactive = min(128, total_ram)                 -> 128 GB
+```
+
+All seats read the same *system-wide* figure, so they do back off together — but
+waiting until only 10 GB is free is far too tight when four processes must each
+still allocate while freeing; whoever needs a buffer at that moment meets the
+OOM killer first. Seats therefore launch with `--cache-ram $((8 * NUM_SEATS))`.
+Override with `COLOSSUL_CACHE_RAM="active [inactive]"`, or set it empty to
+restore ComfyUI's own defaults.
+
+> **Check before tuning.** A near-100% "used" figure on the Vast dashboard is
+> usually reclaimable page cache from reading hundreds of gigabytes of weights,
+> not memory anyone is holding. `colossul ram` shows `free -h` alongside each
+> seat's actual RSS — if `available` is healthy, there is nothing to fix.
+
+Related flags worth knowing, none of which are set by default:
+`--disable-smart-memory` makes ComfyUI offload models to RAM aggressively rather
+than holding VRAM (it trades VRAM pressure for *more* RAM use, so it's the wrong
+lever here); `--cache-none` disables node-output caching entirely, at the cost of
+re-running every node each time. Pass either through `COLOSSUL_COMFYUI_ARGS`.
+
 ### Models
 
 All seats read **one shared store**, so a 40 GB checkpoint costs 40 GB whether
