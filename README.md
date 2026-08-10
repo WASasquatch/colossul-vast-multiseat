@@ -424,6 +424,34 @@ To add a model: find its file on HuggingFace, take the `resolve/main` URL, and
 add a line. The size is optional — `-` looks it up over the network — but
 declaring it is what makes the disk precheck meaningful.
 
+### Updating a running instance
+
+```bash
+colossul-seats version              # what's installed here
+colossul-seats self-update --check  # what's new upstream, changes nothing
+colossul-seats self-update          # install it
+colossul-seats provision            # apply it
+colossul-seats restart all
+```
+
+Recreating an instance to pick up a script fix means a full re-provision — an
+expensive way to change a shell script on a box that has already pulled hundreds
+of gigabytes of weights. `self-update` pulls the scripts and manifests onto the
+running instance instead.
+
+It refuses to install a tree that doesn't parse (a syntax error in
+`/opt/colossul` would take out both the seats and the CLI you'd use to fix
+them), backs the previous version up to `/opt/colossul.backup`, and re-execs
+itself from a copy first — bash reads a script incrementally, so overwriting the
+directory you're running from otherwise resumes reading at a byte offset into a
+different file.
+
+**What it can't update**, because those live in Docker layers rather than in
+this repo: the base image and anything installed by a `RUN` (Node, ffmpeg, uv),
+and the Dockerfile `ENV` defaults (`COMFYUI_REF`, `MODEL_SETS`,
+`ENABLE_COMFYUI_MANAGER`) — the values already in the container's environment
+stay as they are. For those, rent a new instance on a newer image tag.
+
 ### Models
 
 All seats read **one shared store**, so a 40 GB checkpoint costs 40 GB whether
