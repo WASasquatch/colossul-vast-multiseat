@@ -410,6 +410,31 @@ echo "=== 9. the token is never sent to a non-HuggingFace host ==="
 sed 's/#.*//' "$SH" | grep -q 'location-trusted' \
     && fail "--location-trusted hands HF_TOKEN to every host in the redirect chain"
 grep -q 'HF_TOKEN' "$SH" || fail "should support HF_TOKEN for gated repos"
+grep -q 'CIVITAI_TOKEN' "$SH" || fail "should support CIVITAI_TOKEN for civitai.com URLs"
+
+# Each token must go ONLY to its own host. Sending the HuggingFace key to
+# Civitai (or the reverse) hands a credential to a service with no business
+# seeing it, and both are long-lived keys.
+(
+    # shellcheck disable=SC1090
+    eval "$(sed -n '/^_set_urlauth()/,/^}/p' "$SH")"
+    # Exported so shellcheck can see they leave this scope; the eval'd
+    # _set_urlauth reads them.
+    export HF_TOKEN=HFSECRET
+    export CIVITAI_TOKEN=CIVSECRET
+    _URLAUTH=(); _set_urlauth "https://huggingface.co/x/resolve/main/y"
+    printf 'hf:%s\n' "${_URLAUTH[*]:-none}"
+    _URLAUTH=(); _set_urlauth "https://civitai.com/api/download/models/1"
+    printf 'civ:%s\n' "${_URLAUTH[*]:-none}"
+    _URLAUTH=(); _set_urlauth "https://example.com/model.safetensors"
+    printf 'other:%s\n' "${_URLAUTH[*]:-none}"
+) > "$T/urlauth.txt" 2>&1
+grep -q '^hf:.*HFSECRET' "$T/urlauth.txt"   || fail "HF_TOKEN not sent to huggingface.co: $(cat "$T/urlauth.txt")"
+grep -q '^hf:.*CIVSECRET' "$T/urlauth.txt"  && fail "Civitai token leaked to huggingface.co"
+grep -q '^civ:.*CIVSECRET' "$T/urlauth.txt" || fail "CIVITAI_TOKEN not sent to civitai.com"
+grep -q '^civ:.*HFSECRET' "$T/urlauth.txt"  && fail "HuggingFace token leaked to civitai.com"
+grep -q '^other:none' "$T/urlauth.txt"      || fail "a third-party host received a token: $(cat "$T/urlauth.txt")"
+echo "  each token goes only to its own host; third parties get none"
 
 # Prove it rather than trusting the flag audit: curl must not forward the
 # Authorization header when a redirect crosses to another host.
@@ -440,22 +465,26 @@ done
 [ "$eready" = "1" ] || fail "echo server never came up — the token assertions would pass vacuously"
 : > "$T/seen.txt"
 
-# (a) HF_TOKEN must actually BE SENT to the primary host — otherwise gated
-# repos fail with a 401 that looks like a bad token rather than an unused one.
+# (a) End-to-end: a THIRD-PARTY host must receive no Authorization header at
+# all, even with both tokens set. The unit check above proves the selection
+# logic; this proves nothing bypasses it on the real download path.
 cat > "$T/tok.txt" <<EOF
 [tok]
 models/vae/tok.safetensors  2  http://127.0.0.1:$ECHO_PORT/gated.bin
 EOF
-HF_TOKEN=SECRET_TOKEN_VALUE MODEL_MANIFEST="$T/tok.txt" MODEL_SETS="" \
+HF_TOKEN=SECRET_TOKEN_VALUE CIVITAI_TOKEN=CIV_SECRET_VALUE \
+    MODEL_MANIFEST="$T/tok.txt" MODEL_SETS="" \
     bash "$SH" tok >"$T/tokrun.log" 2>&1 || true
-grep -q 'auth=Bearer SECRET_TOKEN_VALUE' "$T/seen.txt" \
-    || fail "HF_TOKEN was NOT sent as an Authorization header: $(cat "$T/seen.txt")"
-echo "  HF_TOKEN is sent as 'Authorization: Bearer ...' to the target host"
+grep -q 'SECRET_TOKEN_VALUE\|CIV_SECRET_VALUE' "$T/seen.txt" \
+    && fail "a token was sent to an unrelated host: $(cat "$T/seen.txt")"
+grep -q 'gated.bin' "$T/seen.txt" \
+    || fail "the request never reached the test server, so this proved nothing: $(cat "$T/seen.txt")"
+echo "  a third-party host is contacted with NO Authorization header"
 
 # (b) …and it must never be echoed into the log, which is world-readable
 # through the instance portal.
-grep -q 'SECRET_TOKEN_VALUE' "$T/tokrun.log" \
-    && fail "the token value was printed to the log: $(grep -n SECRET_TOKEN_VALUE "$T/tokrun.log")"
+grep -qE 'SECRET_TOKEN_VALUE|CIV_SECRET_VALUE' "$T/tokrun.log" \
+    && fail "a token value was printed to the log: $(grep -nE 'SECRET_TOKEN_VALUE|CIV_SECRET_VALUE' "$T/tokrun.log")"
 echo "  token value never appears in the log output"
 
 kill "$(cat "$T/echo.pid" 2>/dev/null)" 2>/dev/null

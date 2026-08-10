@@ -67,11 +67,12 @@ parse_manifest() {
 # disagree about what the server said.
 probe_url() {
     local url="$1" hdr code total
-    hdr="$(curl -sIL --max-time 45 ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
+    local -a _URLAUTH=(); _set_urlauth "$url"
+    hdr="$(curl -sIL --max-time 45 ${_URLAUTH[@]+"${_URLAUTH[@]}"} "$url" 2>/dev/null)"
     code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
     # Some CDNs answer HEAD with 403/405; retry as a GET for a single byte.
     if [ -z "$code" ] || { [ "$code" -ge 400 ] 2>/dev/null; }; then
-        hdr="$(curl -sL --max-time 45 -r 0-0 -D - -o /dev/null ${AUTH[@]+"${AUTH[@]}"} "$url" 2>/dev/null)"
+        hdr="$(curl -sL --max-time 45 -r 0-0 -D - -o /dev/null ${_URLAUTH[@]+"${_URLAUTH[@]}"} "$url" 2>/dev/null)"
         code="$(awk 'toupper($1) ~ /^HTTP/ {c=$2} END {print c}' <<< "$hdr")"
     fi
     # On a 206 the true size is the denominator of Content-Range; Content-Length
@@ -118,18 +119,35 @@ PROGRESS_INTERVAL="${MODEL_PROGRESS_INTERVAL:-30}"
 # HF_TOKEN arrives the same way GITHUB_TOKEN does: set it as a Vast ACCOUNT-level
 # environment variable and the base image writes it to /etc/environment, which
 # load_vast_environment() sourced above. $WORKSPACE/.env works too.
-AUTH=()
-if [ -n "${HF_TOKEN:-}" ]; then
-    AUTH=(--header "Authorization: Bearer ${HF_TOKEN}")
-fi
+
+# Civitai needs its own key, and hosts things HuggingFace does not — community
+# merges like FusionX live only there. Per-URL rather than global: sending the
+# HuggingFace token to Civitai (or the reverse) would leak a credential to a
+# service that has no business seeing it.
+#
+# `curl --url-query`-style header selection is not a thing, so pick per request.
+# Sets _URLAUTH (must be declared local by the caller) to the curl header args
+# appropriate for this URL, or nothing.
+_set_urlauth() {
+    _URLAUTH=()
+    case "$1" in
+        *huggingface.co*)
+            [ -n "${HF_TOKEN:-}" ] && _URLAUTH=(--header "Authorization: Bearer ${HF_TOKEN}") ;;
+        *civitai.com*)
+            [ -n "${CIVITAI_TOKEN:-}" ] && _URLAUTH=(--header "Authorization: Bearer ${CIVITAI_TOKEN}") ;;
+    esac
+    return 0
+}
 # Whether a token is in play is worth stating; its value never is — the
 # provisioning log is readable through the instance portal.
 announce_auth() {
-    if [ "${#AUTH[@]}" -gt 0 ]; then
+    if [ -n "${HF_TOKEN:-}" ]; then
         log "Authenticating to huggingface.co with HF_TOKEN (…${HF_TOKEN: -4})"
     else
-        log "No HF_TOKEN set — public repos only. Gated ones will 401/403."
+        log "No HF_TOKEN set — public HuggingFace repos only. Gated ones will 401/403."
     fi
+    [ -n "${CIVITAI_TOKEN:-}" ] && log "CIVITAI_TOKEN set (…${CIVITAI_TOKEN: -4}) for civitai.com URLs"
+    return 0
 }
 
 # ── Argument handling ───────────────────────────────────────────────────────
@@ -390,6 +408,7 @@ download_one() {
     local dir; dir="$(dirname "$target")"
     mkdir -p "$dir"
 
+    local -a _URLAUTH=(); _set_urlauth "$url"
     local part="$target.part"
     # A stale .part larger than the expected size can never converge; start over.
     if [ -f "$part" ] && [ "$size" != "-" ]; then
@@ -413,7 +432,7 @@ download_one() {
 
     _curl() {
         curl --location --fail --retry 5 --retry-delay 5 --retry-connrefused \
-             --connect-timeout 30 "$@" ${AUTH[@]+"${AUTH[@]}"} \
+             --connect-timeout 30 "$@" ${_URLAUTH[@]+"${_URLAUTH[@]}"} \
              "${progress[@]}" --output "$part" "$url"
     }
 

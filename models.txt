@@ -78,6 +78,12 @@
 # for a manual run. It is read from the environment only, is never written to
 # this file, and is never printed to the log.
 #
+# CIVITAI_TOKEN does the same for civitai.com URLs, which is where community
+# merges live. Tokens are matched to the host of each URL, so the HuggingFace
+# key is never sent to Civitai or the reverse. Put the plain download URL here
+# and let the token come from the environment — a URL with ?token= embedded is
+# a credential committed to git.
+#
 # ── WATCHING IT RUN ─────────────────────────────────────────────────────────
 #
 # Four transfers run at once by default. HuggingFace throttles PER CONNECTION,
@@ -124,6 +130,114 @@ models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors  20970
 # where it comes from. That is all a new entry ever needs.
 #[minimax-h3-turbo]
 #models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FROM THE WORKFLOW SCAN
+# ═════════════════════════════════════════════════════════════════════════════
+# Everything below was resolved from colossul-model-scanner's report of what our
+# own workflows actually load — not from a tutorial. Each filename was matched
+# against real HuggingFace repo listings and its byte count read from the API,
+# so the dest name is exactly what the workflows ask for.
+#
+# Custom LoRAs (character/style models we trained) and preprocessor weights that
+# the node packs fetch themselves on first use are deliberately absent.
+#
+# ── Wan 2.1 via WanVideoWrapper (Kijai) ─────────────────────────────────────
+# The wrapper wants its OWN builds — bf16 encoder, bf16 VAE, a standalone VACE
+# module — not the Comfy-Org repackaged files. Different filenames, so both sets
+# coexist. 12-20 workflows each; this is the busiest group we have.  17.7 GB
+[wan21-wrapper]
+models/text_encoders/umt5-xxl-enc-bf16.safetensors  11361845464  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/umt5-xxl-enc-bf16.safetensors
+models/vae/Wan2_1_VAE_bf16.safetensors  253806278  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors
+models/diffusion_models/Wan2_1-VACE_module_14B_bf16.safetensors  6098227873  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1-VACE_module_14B_bf16.safetensors
+
+# Speed LoRAs used across the wrapper workflows.  2.2 GB
+[wan21-wrapper-speed]
+models/loras/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors  1466506280  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors
+models/loras/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors  738005744  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors
+models/loras/Wan21_T2V_14B_MoviiGen_lora_rank32_fp16.safetensors  316822496  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan21_T2V_14B_MoviiGen_lora_rank32_fp16.safetensors
+
+# ── Lip-sync / voice (voice_sync_test_*) ────────────────────────────────────
+# InfiniteTalk plus the audio front-end. Needs [wan21-wrapper] too.  5.8 GB
+[wan21-infinitetalk]
+models/diffusion_models/Wan2_1-InfiniteTalk-Multi_fp16.safetensors  5124439112  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/InfiniteTalk/Wan2_1-InfiniteTalk-Multi_fp16.safetensors
+models/audio_encoders/wav2vec2-chinese-base_fp16.safetensors  190115368  https://huggingface.co/Kijai/wav2vec2_safetensors/resolve/main/wav2vec2-chinese-base_fp16.safetensors
+models/audio_separation/MelBandRoformer_fp16.safetensors  456479072  https://huggingface.co/Kijai/MelBandRoFormer_comfy/resolve/main/MelBandRoformer_fp16.safetensors
+
+# ── Wan 2.2 i2v, fp8_scaled ─────────────────────────────────────────────────
+# The workflows load fp8_scaled, NOT the fp16 in [wan2.2-i2v-14b] above — half
+# the size, and a different filename, so it is a separate entry rather than a
+# replacement. 5 workflows.  31.0 GB
+[wan22-i2v-fp8]
+models/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors  14294742832  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors
+models/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors  14294742832  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors
+models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors  1226977424  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors
+models/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors  1226977424  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors
+
+# ── Wan 2.2 Fun VACE (4_Stitch) ─────────────────────────────────────────────
+# The t2v speed LoRAs here are RENAMED on the way in: upstream publishes them as
+# high_noise_model / low_noise_model inside a versioned folder, and the workflows
+# expect the long descriptive names. Upstream has Seko V1, V1.1 and V2.0 at
+# rank64/4-step; V1.1 is used here — check against a render if motion looks off,
+# since the "1217" in our filename does not appear upstream.  37.1 GB
+[wan22-fun-vace]
+models/diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors  17346056104  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_fun_vace_high_noise_14B_fp8_scaled.safetensors
+models/diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors  17346056104  https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_fun_vace_low_noise_14B_fp8_scaled.safetensors
+models/loras/wan2.2_t2v_A14b_high_noise_lora_rank64_lightx2v_4step_1217.safetensors  1226977424  https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/high_noise_model.safetensors
+models/loras/wan2.2_t2v_A14b_low_noise_lora_rank64_lightx2v_4step_1217.safetensors  1226977424  https://huggingface.co/lightx2v/Wan2.2-Lightning/resolve/main/Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/low_noise_model.safetensors
+
+# ── Wan 2.1 SCAIL 2 (video_wan21_scail2_quokka) ─────────────────────────────
+# Comfy-Org's official repo, which carries the exact fp16 filename the workflow
+# asks for. sam3.1 is loaded as a checkpoint in the same workflow.  35.8 GB
+[wan21-scail2]
+models/diffusion_models/wan2.1_14B_SCAIL_2_fp16.safetensors  32794040328  https://huggingface.co/Comfy-Org/SCAIL-2/resolve/main/diffusion_models/wan2.1_14B_SCAIL_2_fp16.safetensors
+models/loras/wan2.1_SCAIL_2_DPO_lora_bf16.safetensors  1226936552  https://huggingface.co/Comfy-Org/SCAIL-2/resolve/main/loras/wan2.1_SCAIL_2_DPO_lora_bf16.safetensors
+models/checkpoints/sam3.1_multiplex_fp16.safetensors  1745546848  https://huggingface.co/Comfy-Org/sam3/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors
+
+# ── LTX 2.3, the build our workflow actually loads ──────────────────────────
+# One 46 GB all-in-one file: the workflow points its checkpoint loader, audio VAE
+# loader AND text-encoder loader at the same name. Distinct from the -fp8 builds
+# in [ltx-2.3] above.  46.1 GB
+[ltx-2.3-distilled-1.1]
+models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors  46149345334  https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-1.1.safetensors
+
+# ── Qwen image editing, the variants our workflows load ─────────────────────
+# 2512 is the base image model (BG-plate work); the FP8 edit build is a lighter
+# alternative to the bf16 already in [qwen-image-edit-2511].  44.6 GB
+[qwen-workflows]
+models/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors  20430679144  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors
+models/diffusion_models/Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors  20430635176  https://huggingface.co/1038lab/Qwen-Image-Edit-2511-FP8/resolve/main/Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors
+models/controlnet/Qwen-Image-2512-Fun-Controlnet-Union-2602.safetensors  3512432536  https://huggingface.co/alibaba-pai/Qwen-Image-2512-Fun-Controlnet-Union/resolve/main/Qwen-Image-2512-Fun-Controlnet-Union-2602.safetensors
+models/loras/qwen-image-edit-2511-multiple-angles-lora.safetensors  295140688  https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/resolve/main/qwen-image-edit-2511-multiple-angles-lora.safetensors
+
+# ── Video Depth Anything ────────────────────────────────────────────────────
+# 12 workflows. The node pack does NOT fetch this itself.  0.5 GB
+[video-depth-anything]
+models/video_depth_anything/video_depth_anything_vitb.pth  458247082  https://huggingface.co/depth-anything/Video-Depth-Anything-Base/resolve/main/video_depth_anything_vitb.pth
+
+# ── Could NOT be resolved to a public URL ───────────────────────────────────
+#
+# Wan14BT2VFusioniX_fp16_.safetensors   (12 workflows — our most-used model)
+# Wan14Bi2vFusioniX_fp16.safetensors    (2 workflows)
+#     FusionX is a community merge published on Civitai, not HuggingFace. The
+#     mirrors that exist on HF are GGUF (wrong format for UNETLoader) or the
+#     VACE-merged build — and the VACE-merged one is NOT a substitute here,
+#     because these workflows load plain T2V FusionX alongside a separate
+#     Wan2_1-VACE_module. Civitai's API returned 403 then 503 during
+#     resolution, so nothing could be verified.
+#     Add with:  models/diffusion_models/<name>  <civitai download url>
+#     and set CIVITAI_TOKEN (see AUTHENTICATION above).
+#
+# gurrenlagannstyle_5B_e333.safetensors  (9 workflows)
+#     A style LoRA; no public HF match. Likely Civitai or trained in-house —
+#     worth checking which, given how many workflows use it.
+#
+# 4x-UltraMix_Smooth.pth
+#     Bypassed in the only workflow that references it, so it is not blocking.
+#
+# The Wan 2.1 checkpoint/VAE/encoder these need are already covered above, so
+# only the FusionX weights themselves are missing.
 
 
 # ═════════════════════════════════════════════════════════════════════════════
