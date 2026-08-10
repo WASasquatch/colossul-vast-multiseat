@@ -146,11 +146,24 @@ models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors  20970
 # ── Wan 2.1 via WanVideoWrapper (Kijai) ─────────────────────────────────────
 # The wrapper wants its OWN builds — bf16 encoder, bf16 VAE, a standalone VACE
 # module — not the Comfy-Org repackaged files. Different filenames, so both sets
-# coexist. 12-20 workflows each; this is the busiest group we have.  17.7 GB
+# coexist. 12-20 workflows each; this is the busiest group we have.
+#
+# TWO DIFFERENT VACE THINGS, both here on purpose:
+#   Wan2_1-VACE_module_14B_bf16   6.1 GB  a MODULE, applied on top of a base
+#                                         model. This is what the scanned
+#                                         workflows load via
+#                                         WanVideoVACEModelSelect.
+#   wan2.1_vace_14B_fp16         34.7 GB  the FULL model, standalone.
+# Kijai publishes no full fp16 — only modules (bf16 and fp8) — so the full build
+# comes from Comfy-Org's repackaged repo. It is also listed under
+# [wan2.1-vace-14b]; selecting both sets downloads it once, not twice.
+#
+# 52.4 GB
 [wan21-wrapper]
 models/text_encoders/umt5-xxl-enc-bf16.safetensors  11361845464  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/umt5-xxl-enc-bf16.safetensors
 models/vae/Wan2_1_VAE_bf16.safetensors  253806278  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors
 models/diffusion_models/Wan2_1-VACE_module_14B_bf16.safetensors  6098227873  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1-VACE_module_14B_bf16.safetensors
+models/diffusion_models/wan2.1_vace_14B_fp16.safetensors  34675323640  https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_vace_14B_fp16.safetensors
 
 # Speed LoRAs used across the wrapper workflows.  2.2 GB
 [wan21-wrapper-speed]
