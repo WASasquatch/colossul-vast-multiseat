@@ -573,6 +573,29 @@ print_model_status() {
     local running=0
     supervisorctl status colossul-models 2>/dev/null | grep -q RUNNING && running=1
 
+    # Is any of this going to survive the instance being destroyed? A volume is
+    # a separate mount; container disk is not. Worth stating, because the
+    # difference is invisible until someone destroys an instance and loses both
+    # the library and every artist's saved workflow.
+    local assets_dev root_dev container_dev
+    assets_dev="$(df -P "$ASSETS_ROOT" 2>/dev/null | awk 'NR==2 {print $1}')"
+    root_dev="$(df -P "${COLOSSUL_ROOT:-/workspace}" 2>/dev/null | awk 'NR==2 {print $1}')"
+    container_dev="$(df -P / 2>/dev/null | awk 'NR==2 {print $1}')"
+    echo "  STORAGE"
+    if [ -n "$assets_dev" ] && [ "$assets_dev" != "$container_dev" ]; then
+        echo "      models    on a separate volume — survives instance destroy"
+    else
+        echo "      models    on CONTAINER DISK — lost when this instance is destroyed"
+    fi
+    if [ -n "$root_dev" ] && [ "$root_dev" != "$container_dev" ]; then
+        echo "      seat data on a separate volume — survives instance destroy"
+    else
+        echo "      seat data on CONTAINER DISK — saved workflows, outputs and"
+        echo "                project databases are LOST when this instance is destroyed"
+        echo "                (see 'Persistent storage' in the README)"
+    fi
+    echo ""
+
     echo "  MODELS"
     if [ "$running" = "1" ]; then
         echo "      DOWNLOADING NOW, in the background: ${MODEL_SETS:-?}"

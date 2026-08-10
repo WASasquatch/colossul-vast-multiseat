@@ -452,6 +452,57 @@ and the Dockerfile `ENV` defaults (`COMFYUI_REF`, `MODEL_SETS`,
 `ENABLE_COMFYUI_MANAGER`) — the values already in the container's environment
 stay as they are. For those, rent a new instance on a newer image tag.
 
+### Persistent storage (Vast volumes)
+
+Vast has two kinds of storage and they behave completely differently:
+
+| | Container disk | Volume |
+|---|---|---|
+| Holds | everything, incl. `/workspace` | whatever you mount into it |
+| Survives **stop / start** | yes | yes |
+| Survives **destroy** | **no** | **yes** |
+| Movable between machines | n/a | **no — tied to one physical host** |
+| Resizable after creation | at rent time | **no** |
+
+So the container disk is where a 414 GB library and every artist's saved
+workflow currently live, and destroying the instance takes all of it. A volume
+is the only thing that outlives the instance.
+
+**The catch:** *"A volume is physically tied to the machine it was created on.
+It can only be attached to instances running on the same physical machine."* You
+re-rent it from the Storage page via **Rent instance using this volume**, which
+filters offers to that one host. If it's busy, you wait — or start over
+elsewhere. That's the trade for not re-downloading.
+
+#### Setting it up
+
+Create the volume large enough for the library plus working room — it cannot be
+resized later. `colossul models --list` gives the current total; ~600 GB is
+comfortable for 414 GB of weights plus outputs. Then in the template's Docker
+Options:
+
+```
+-e COLOSSUL_ASSETS_ROOT=/data/ComfyUI_Assets
+-e COLOSSUL_ROOT=/data/colossul
+```
+
+(`/data` is where GUI-created volumes mount by default.)
+
+**Both matter, for different reasons.** `COLOSSUL_ASSETS_ROOT` saves the
+re-download — expensive but recoverable. `COLOSSUL_ROOT` holds the per-seat
+trees: saved ComfyUI workflows, rendered outputs, and each seat's Storyrendr
+project database. That work is **not** recoverable, and it's the one people
+forget until it's gone.
+
+With both set, destroying and re-renting on the same machine comes back with the
+library and everyone's work intact, and provisioning skips straight past the
+downloads.
+
+> Your screenshot has Container 2.00 TB and Volume 10.00 GB. That volume is too
+> small to hold anything meaningful — as configured, the models would land on
+> container disk and vanish with the instance. Flip the ratio: a modest
+> container, and a volume big enough for the library.
+
 ### Host RAM
 
 Four ComfyUI processes share one machine's RAM, and ComfyUI's defaults assume
