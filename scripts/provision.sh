@@ -340,6 +340,25 @@ fi
 # This is additive: ComfyUI still scans its own models/ dir, so anything already
 # there (the base image symlinks SD1.5 in) keeps resolving.
 # ─────────────────────────────────────────────────────────────────────────────
+# Say which storage is in use, and never silently strand data. If a volume was
+# picked up but an earlier run left weights or seat data on container disk, that
+# tree is now invisible to the seats — announcing it beats an artist discovering
+# their workflows are "gone" when they were only left behind.
+if [ -n "${COLOSSUL_VOLUME_ROOT:-}" ]; then
+    log "Volume detected at $COLOSSUL_VOLUME_ROOT — models and seat data will survive instance destroy."
+    for stray in "$WORKSPACE/ComfyUI_Assets" "$WORKSPACE/colossul"; do
+        [ -d "$stray" ] || continue
+        [ -n "$(ls -A "$stray" 2>/dev/null)" ] || continue
+        warn "  Data from an earlier run is still on container disk: $stray"
+        warn "  It is NOT being used now, and it dies with this instance. Move it:"
+        warn "      mv $stray/* ${COLOSSUL_VOLUME_ROOT}/$(basename "$stray")/"
+    done
+else
+    log "No volume attached — models and seat data live on container disk"
+    log "  and are LOST when this instance is destroyed. See 'Persistent storage'"
+    log "  in the README; attaching a volume needs no configuration."
+fi
+
 log "Preparing the shared model store at $ASSETS_ROOT ..."
 ensure_asset_dirs
 write_extra_model_paths "$COLOSSUL_ETC/extra_model_paths.yaml"

@@ -474,34 +474,44 @@ re-rent it from the Storage page via **Rent instance using this volume**, which
 filters offers to that one host. If it's busy, you wait — or start over
 elsewhere. That's the trade for not re-downloading.
 
-#### Setting it up
+#### Using one — no configuration needed
 
-Create the volume large enough for the library plus working room — it cannot be
-resized later. `colossul models --list` gives the current total; ~600 GB is
-comfortable for 414 GB of weights plus outputs. Then in the template's Docker
-Options:
+**Attach a volume and the image uses it automatically.** On boot it looks for a
+mount at `/data`, `/mnt/data` or `/volume` that is a genuinely different
+filesystem from `/`, and if it finds one, both the model library and all
+per-seat data go there instead of onto container disk. Nothing to set.
 
-```
--e COLOSSUL_ASSETS_ROOT=/data/ComfyUI_Assets
--e COLOSSUL_ROOT=/data/colossul
-```
+**Renting the first time**
 
-(`/data` is where GUI-created volumes mount by default.)
+1. In the offer's config, set **Container Size** modestly — 60–100 GB is plenty;
+   it holds the OS, ComfyUI and node packs, not weights.
+2. Under **Add volume**, choose **Create local volume** and set the size to fit
+   the library plus working room. `colossul models --list` gives the current
+   total; ~600 GB suits 414 GB of weights plus outputs. **It cannot be resized
+   later**, so err large.
+3. Rent. The volume mounts at `/data` and provisioning logs
+   `Volume detected at /data`.
 
-**Both matter, for different reasons.** `COLOSSUL_ASSETS_ROOT` saves the
-re-download — expensive but recoverable. `COLOSSUL_ROOT` holds the per-seat
-trees: saved ComfyUI workflows, rendered outputs, and each seat's Storyrendr
-project database. That work is **not** recoverable, and it's the one people
-forget until it's gone.
+**Re-renting later, keeping everything**
 
-With both set, destroying and re-renting on the same machine comes back with the
-library and everyone's work intact, and provisioning skips straight past the
-downloads.
+1. **Storage** in the sidebar → find the volume.
+2. **Rent instance using this volume** — this filters offers to the one machine
+   the volume lives on.
+3. Rent, same template. Provisioning finds the library already there, skips the
+   download, and the artists' workflows and outputs are as they left them.
 
-> Your screenshot has Container 2.00 TB and Volume 10.00 GB. That volume is too
-> small to hold anything meaningful — as configured, the models would land on
-> container disk and vanish with the instance. Flip the ratio: a modest
-> container, and a volume big enough for the library.
+To pin the paths yourself instead, `COLOSSUL_ASSETS_ROOT` and `COLOSSUL_ROOT`
+override detection; `COLOSSUL_VOLUME` points detection at a different mount.
+
+**Why both trees, not just the models.** The library is expensive to lose but
+recoverable — you re-download. `COLOSSUL_ROOT` holds the per-seat trees: saved
+ComfyUI workflows, rendered outputs, and each seat's Storyrendr project
+database. That work is **not** recoverable, and it's the part people forget
+until it's gone.
+
+> A Container of 2.00 TB with a Volume of 10.00 GB is the wrong way round: the
+> volume can't hold anything meaningful, so everything lands on container disk
+> and dies with the instance. Small container, large volume.
 
 ### Host RAM
 

@@ -23,20 +23,48 @@ die()  { echo "[colossul] ERROR: $*" >&2; exit 1; }
 # only path guaranteed to persist across instance stop/start.
 # SRC_DIR/SEATS_DIR/ASSETS_ROOT are consumed by the scripts that source this
 # file, so shellcheck can't see their use.
+# Where a Vast volume is mounted, if one is attached. Prints nothing otherwise.
+#
+# Container disk dies with the instance; a volume does not. Everything expensive
+# here — the model library, and every artist's saved workflows, outputs and
+# project database — should therefore land on a volume WHENEVER one exists,
+# without anyone having to remember two environment variables.
+#
+# A candidate only counts if it is a genuinely different filesystem from /.
+# Otherwise it is just a directory on container disk wearing a volume's name,
+# and using it would produce a false sense of durability.
+colossul_volume_root() {
+    local cand root_dev
+    root_dev="$(df -P / 2>/dev/null | awk 'NR==2 {print $1}')"
+    for cand in ${COLOSSUL_VOLUME:+"$COLOSSUL_VOLUME"} /data /mnt/data /volume; do
+        [ -d "$cand" ] && [ -w "$cand" ] || continue
+        [ "$(df -P "$cand" 2>/dev/null | awk 'NR==2 {print $1}')" != "$root_dev" ] || continue
+        printf '%s\n' "$cand"
+        return 0
+    done
+    return 1
+}
+
 # shellcheck disable=SC2034
 colossul_init_paths() {
     WORKSPACE="${WORKSPACE:-/workspace}"
     COLOSSUL_ETC="${COLOSSUL_ETC:-/etc/colossul}"
-    COLOSSUL_ROOT="${COLOSSUL_ROOT:-$WORKSPACE/colossul}"
     COLOSSUL_LIB="${COLOSSUL_LIB:-/opt/colossul}"
+
+    # Volume first, container disk as the fallback. Explicit COLOSSUL_ROOT /
+    # COLOSSUL_ASSETS_ROOT always win, so an operator can pin either anywhere.
+    COLOSSUL_VOLUME_ROOT="$(colossul_volume_root || true)"
+    local base="${COLOSSUL_VOLUME_ROOT:-$WORKSPACE}"
+
+    COLOSSUL_ROOT="${COLOSSUL_ROOT:-$base/colossul}"
 
     SRC_DIR="$COLOSSUL_ROOT/src/storyrendr"
     SEATS_DIR="$COLOSSUL_ROOT/seats"
     RUNTIME_ENV="$COLOSSUL_ETC/runtime.env"
 
-    # One shared model tree, outside the ComfyUI install so a reinstall can't
-    # take the weights with it and it can be moved to its own volume.
-    ASSETS_ROOT="${COLOSSUL_ASSETS_ROOT:-$WORKSPACE/ComfyUI_Assets}"
+    # One shared model tree, outside the ComfyUI install so a reinstall cannot
+    # take the weights with it.
+    ASSETS_ROOT="${COLOSSUL_ASSETS_ROOT:-$base/ComfyUI_Assets}"
 }
 colossul_init_paths
 

@@ -82,6 +82,9 @@ bash tests/check-custom-nodes.sh || rc=1
 note "MODEL DOWNLOADS"
 bash tests/check-models-download.sh || rc=1
 
+note "VOLUME / PERSISTENCE"
+bash tests/check-volume.sh || rc=1
+
 note "SELF-UPDATE"
 bash tests/check-self-update.sh || rc=1
 
