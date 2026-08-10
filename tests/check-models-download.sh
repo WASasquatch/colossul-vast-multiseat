@@ -537,7 +537,17 @@ need(r'^\[program:colossul-models\]', "unit name")
 need(r'^autorestart=false',           "a finished download must not be restarted forever")
 need(r'^startsecs=0',                 "a fast no-op run must not count as a failed start")
 need(r'MODEL_SETS="alpha,beta"',      "the requested sets must reach the job")
-need(r'^stdout_logfile=/var/log/portal/models\.log', "must log where the portal shows it")
+need(r'^stdout_logfile=/dev/stdout',   "must reach the INSTANCE log, which is where an operator watches")
+need(r'tee /var/log/portal/models\.log', "should also keep a portal log for its own tab")
+need(r'set -o pipefail',               "without pipefail the pipe hides the downloader's exit status")
+
+# The command must survive supervisor's own parsing as `bash -c <one script>`.
+import shlex, configparser, io
+c = configparser.ConfigParser(interpolation=None)
+c.read_string(cfg)
+parts = shlex.split(c["program:colossul-models"]["command"])
+if parts[:2] != ["/bin/bash", "-c"] or len(parts) != 3:
+    print(f"command does not parse to bash -c <script>: {parts}"); sys.exit(1)
 PY
 echo "  unit is a one-shot job, logging where the portal can show it"
 echo "PASS: weights download behind the seats, never in front of them"

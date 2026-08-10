@@ -757,7 +757,15 @@ write_models_unit() {
         echo ""
         echo "[program:colossul-models]"
         echo "environment=PROC_NAME=\"%(program_name)s\",MODEL_SETS=\"${sets}\""
-        echo "command=${COLOSSUL_LIB}/install-models.sh"
+        # Two destinations on purpose. stdout_logfile below is /dev/stdout, which
+        # is the INSTANCE log — the one an operator actually watches on Vast, and
+        # where provisioning and the seats already report. The tee additionally
+        # keeps a file under /var/log/portal so the download gets its own tab in
+        # the Instance Portal. Writing only to the portal file, as this did
+        # first, makes a multi-hour download completely invisible in the place
+        # people look for it.
+        # pipefail so install-models.sh's exit status survives the pipe.
+        echo "command=/bin/bash -c \"set -o pipefail; ${COLOSSUL_LIB}/install-models.sh 2>&1 | tee /var/log/portal/models.log\""
         echo "autostart=true"
         echo "autorestart=false"
         echo "startsecs=0"
@@ -766,9 +774,8 @@ write_models_unit() {
         echo "stopasgroup=true"
         echo "killasgroup=true"
         echo "stopwaitsecs=30"
-        echo "stdout_logfile=/var/log/portal/models.log"
-        echo "stdout_logfile_maxbytes=10MB"
-        echo "stdout_logfile_backups=1"
+        echo "stdout_logfile=/dev/stdout"
+        echo "stdout_logfile_maxbytes=0"
         echo "redirect_stderr=true"
     } > "$outfile"
 }
