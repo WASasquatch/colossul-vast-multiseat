@@ -390,6 +390,10 @@ kill "$(cat "$T/slow.pid" 2>/dev/null)" 2>/dev/null
 # an operator actually needs.
 grep -qE 'progress: .*%\).*eta' "$T/slow.log" \
     || fail "no progress lines in a non-TTY log — it would look hung: $(cat "$T/slow.log")"
+# "how many of how many files" is the question an operator actually asks of a
+# 59-file library; bytes alone do not answer it.
+grep -qE 'progress: [0-9]+/[0-9]+ files' "$T/slow.log" \
+    || fail "progress should report files complete out of total: $(cat "$T/slow.log")"
 grep -q 'done slow' "$T/slow.log" || fail "should report each file finishing"
 grep -qE '\[1/1\] start' "$T/slow.log" || fail "should show which file of how many"
 ticks=$(grep -cE 'progress: .*%\)' "$T/slow.log")

@@ -482,23 +482,27 @@ done <<< "${TODO%$'\n'}"
 
 # Bytes of the requested set currently on disk: the finished file if it has been
 # renamed, else whatever its .part has so far.
+# Prints "<bytes><TAB><files-complete>". A finished file has been renamed off
+# its .part, so its presence is the completion signal.
 bytes_on_disk() {
-    local t s total=0 n
+    local t s total=0 n done=0
     while IFS=$'\t' read -r t s; do
         [ -n "$t" ] || continue
-        if [ -f "$t" ]; then n="$(stat -c %s "$t" 2>/dev/null || echo 0)"
+        if [ -f "$t" ]; then
+            n="$(stat -c %s "$t" 2>/dev/null || echo 0)"
+            done=$((done + 1))
         elif [ -f "$t.part" ]; then n="$(stat -c %s "$t.part" 2>/dev/null || echo 0)"
         else n=0; fi
         total=$((total + n))
     done < "$PARTS_LIST"
-    echo "$total"
+    printf '%s\t%s\n' "$total" "$done"
 }
 
 # One aggregate progress line for the whole run. Per-file lines would interleave
 # unreadably with several transfers in flight, and the number an operator
 # actually wants is "how long until the library is here".
 monitor_progress() {
-    local start last_t last_b now total rate eta pct active
+    local start last_t last_b now total ndone rate eta pct active
     start="$(date +%s)"; last_t="$start"; last_b=0
     while [ -e "$STATUS_DIR/.running" ]; do
         local waited=0
@@ -506,7 +510,7 @@ monitor_progress() {
             sleep 1; waited=$((waited + 1))
         done
         [ -e "$STATUS_DIR/.running" ] || break
-        total="$(bytes_on_disk)"
+        IFS=$'\t' read -r total ndone < <(bytes_on_disk)
         now="$(date +%s)"
         rate=$(( (total - last_b) / ((now - last_t) > 0 ? (now - last_t) : 1) ))
         active="$(find "$STATUS_DIR" -maxdepth 1 -name '.active-*' 2>/dev/null | wc -l)"
@@ -516,7 +520,7 @@ monitor_progress() {
         else
             eta="stalled"
         fi
-        log "  progress: $(human "$total") / $(human "$NEED_BYTES") (${pct}%) | ${active} active | $(( rate / 1000000 )) MB/s | eta $eta"
+        log "  progress: ${ndone}/${TODO_COUNT} files | $(human "$total") / $(human "$NEED_BYTES") (${pct}%) | ${active} downloading | $(( rate / 1000000 )) MB/s | eta $eta"
         last_t="$now"; last_b="$total"
     done
 }
