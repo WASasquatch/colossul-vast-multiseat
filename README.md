@@ -414,9 +414,11 @@ declared byte count does real work — it checks free disk *before* a 20 GB
 transfer starts, distinguishes "complete" from "truncated", and lets a
 half-written file be repaired instead of silently loading as a corrupt model.
 
-Downloads run one at a time on purpose. A single stream already saturates these
-instances (~70–90 MB/s observed), so concurrency buys nothing while making disk
-accounting and resume much harder to reason about.
+**Four transfers run concurrently** (`MODEL_DL_JOBS`, set to `1` for serial).
+A single stream is fast on a cold connection, but HuggingFace throttles *per
+connection*, so a sustained pull degrades badly — sequentially the full library
+managed roughly ten files an hour. Downloads are independent, each with its own
+`.part`, so parallelism costs nothing in correctness.
 
 To add a model: find its file on HuggingFace, take the `resolve/main` URL, and
 add a line. The size is optional — `-` looks it up over the network — but

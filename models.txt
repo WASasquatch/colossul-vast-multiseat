@@ -80,14 +80,19 @@
 #
 # ── WATCHING IT RUN ─────────────────────────────────────────────────────────
 #
-# Downloads report into the instance log every 30 seconds, per file:
+# Four transfers run at once by default. HuggingFace throttles PER CONNECTION,
+# so a single stream degrades badly over a long pull — sequentially the full
+# library managed about ten files an hour. MODEL_DL_JOBS changes the count; 1
+# restores serial behaviour.
 #
-#     [3/14] wan2.2_i2v_high_noise_14B_fp16.safetensors: 8.1 GB / 28.6 GB (28%)
-#            at 79 MB/s, eta 4m18s
+# Progress goes to the instance log every 30 seconds, for the run as a whole
+# rather than per file (with several transfers in flight, per-file lines
+# interleave into noise):
+#
+#     progress: 96.4 GB / 413.9 GB (23%) | 4 active | 243 MB/s | eta 21m48s
 #
 # so a big pull never looks like a hung provisioner. MODEL_PROGRESS_INTERVAL
-# changes the cadence in seconds. On a terminal you get curl's own progress bar
-# instead.
+# changes the cadence in seconds.
 #
 # ── RE-RUNNING ──────────────────────────────────────────────────────────────
 #

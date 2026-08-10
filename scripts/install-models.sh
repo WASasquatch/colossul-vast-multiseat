@@ -105,7 +105,6 @@ fmt_secs() {
 # How often to report on a running download, in seconds. A 21 GB file takes
 # minutes; without this the log looks hung.
 PROGRESS_INTERVAL="${MODEL_PROGRESS_INTERVAL:-30}"
-FILE_NO=0
 
 # ── Auth ────────────────────────────────────────────────────────────────────
 # Established before ANY command that touches the network, so --check and
@@ -381,11 +380,11 @@ if [ "$NEED_BYTES" -gt 0 ] && [ "$AVAIL" -lt $((NEED_BYTES + MARGIN)) ]; then
 fi
 
 # ── Download ────────────────────────────────────────────────────────────────
-# Sequential on purpose. A single stream already saturates these instances
-# (~70-90 MB/s observed), so concurrency buys nothing and makes the disk check,
-# the progress output and resume-after-interrupt all harder to reason about.
+# Runs in a subshell as one of several concurrent workers, so it must not touch
+# shell state the parent needs: results go to $STATUS_DIR/<idx>, which the parent
+# reads back once everything has finished.
 download_one() {
-    local dest="$1" size="$2" url="$3"
+    local dest="$1" size="$2" url="$3" idx="$4"
     local target="$ASSETS_ROOT/$dest"
     local name; name="$(basename "$dest")"
     local dir; dir="$(dirname "$target")"
@@ -405,16 +404,12 @@ download_one() {
 
     local pretty="$size"
     [ "$size" = "-" ] && pretty="unknown size" || pretty="$(human "$size")"
-    FILE_NO=$((FILE_NO + 1))
-    log "  [$FILE_NO/$TODO_COUNT] fetching $name ($pretty)"
+    log "  [$idx/$TODO_COUNT] start $name ($pretty)"
 
-    # curl's own progress bar is \r-driven and only usable on a terminal. In the
-    # Vast log — which is where an operator actually watches provisioning — it
-    # would be either an unreadable smear or, with --silent, five minutes of
-    # total silence per file. Silence there is indistinguishable from a hang,
-    # so on a non-TTY we poll the partial file and print a line instead.
+    # Always silent per transfer. curl's bar is \r-driven and only readable on a
+    # terminal, and with several transfers in flight even line output would
+    # interleave into noise — the aggregate monitor reports for all of them.
     local progress=(--silent --show-error)
-    [ -t 2 ] && progress=(--progress-bar)
 
     _curl() {
         curl --location --fail --retry 5 --retry-delay 5 --retry-connrefused \
@@ -422,48 +417,8 @@ download_one() {
              "${progress[@]}" --output "$part" "$url"
     }
 
-    # Run curl in the background and report on it, unless we're on a terminal
-    # where curl's own bar is better.
-    _curl_watched() {
-        if [ -t 2 ]; then
-            _curl "$@"
-            return $?
-        fi
-        _curl "$@" &
-        local pid=$! start last_t last_b now b elapsed rate eta pct waited
-        start="$(date +%s)"; last_t="$start"; last_b=0
-        while kill -0 "$pid" 2>/dev/null; do
-            waited=0
-            while [ "$waited" -lt "$PROGRESS_INTERVAL" ] && kill -0 "$pid" 2>/dev/null; do
-                sleep 1; waited=$((waited + 1))
-            done
-            kill -0 "$pid" 2>/dev/null || break
-            now="$(date +%s)"
-            b="$(stat -c %s "$part" 2>/dev/null || echo 0)"
-            rate=$(( (b - last_b) / ((now - last_t) > 0 ? (now - last_t) : 1) ))
-            if [ "$size" != "-" ] && [ "$size" -gt 0 ]; then
-                pct=$(( b * 100 / size ))
-                if [ "$rate" -gt 0 ]; then
-                    eta="$(fmt_secs $(( (size - b) / rate )))"
-                else
-                    eta="stalled"
-                fi
-                log "    [$FILE_NO/$TODO_COUNT] $name: $(human "$b") / $(human "$size") (${pct}%) at $(( rate / 1000000 )) MB/s, eta $eta"
-            else
-                log "    [$FILE_NO/$TODO_COUNT] $name: $(human "$b") at $(( rate / 1000000 )) MB/s"
-            fi
-            last_t="$now"; last_b="$b"
-        done
-        wait "$pid"
-        local wrc=$?
-        elapsed=$(( $(date +%s) - start ))
-        b="$(stat -c %s "$part" 2>/dev/null || echo 0)"
-        [ "$wrc" = "0" ] && [ "$elapsed" -gt 0 ] && \
-            log "    $name complete in $(fmt_secs "$elapsed") (avg $(( b / elapsed / 1000000 )) MB/s)"
-        return "$wrc"
-    }
-
-    _curl_watched --continue-at -
+    local started; started="$(date +%s)"
+    _curl --continue-at -
     local rc=$?
     # 33 = "server doesn't support byte ranges". Without this fallback a partial
     # from such a host can NEVER complete: every re-run attempts a resume, gets
@@ -472,36 +427,136 @@ download_one() {
     if [ "$rc" = "33" ]; then
         warn "  $name: server won't resume; restarting the download from zero"
         rm -f "$part"
-        _curl_watched
+        _curl
         rc=$?
     fi
     if [ "$rc" != "0" ]; then
-        warn "  download failed: $name (curl exit $rc)"
-        FAILED+=("$dest (download)")
+        warn "  FAILED $name (curl exit $rc)"
+        printf 'fail\t%s (download, curl %s)\n' "$dest" "$rc" > "$STATUS_DIR/$idx"
         return 1
     fi
 
     if [ "$size" != "-" ]; then
         local got; got="$(stat -c %s "$part" 2>/dev/null || echo 0)"
         if [ "$got" != "$size" ]; then
-            warn "  size mismatch for $name: got $got, expected $size"
-            warn "  (partial kept at $part — re-run to resume)"
-            FAILED+=("$dest (truncated)")
+            warn "  FAILED $name: got $got bytes, expected $size (partial kept, re-run to resume)"
+            printf 'fail\t%s (truncated)\n' "$dest" > "$STATUS_DIR/$idx"
             return 1
         fi
     fi
 
     # Rename only once complete, so an interrupted run never leaves a
     # half-written file that later looks finished.
-    mv -f "$part" "$target" || { FAILED+=("$dest (rename)"); return 1; }
-    FETCHED=$((FETCHED + 1))
+    if ! mv -f "$part" "$target"; then
+        printf 'fail\t%s (rename)\n' "$dest" > "$STATUS_DIR/$idx"
+        return 1
+    fi
+    local secs=$(( $(date +%s) - started ))
+    [ "$secs" -lt 1 ] && secs=1
+    log "  done $name in $(fmt_secs "$secs")$( [ "$size" != "-" ] && printf ' (%s MB/s)' "$(( size / secs / 1000000 ))" )"
+    printf 'ok\t%s\n' "$dest" > "$STATUS_DIR/$idx"
     return 0
 }
 
+# ── Run the downloads, N at a time ──────────────────────────────────────────
+# Concurrency is not about link speed — a single stream can saturate these
+# instances on a cold connection. It is about HuggingFace throttling a sustained
+# transfer: one stream degrades badly over a long pull, while several in
+# parallel each get their own allowance. Sequential took over an hour to move
+# ten files.
+#
+# Downloads have none of the constraints that force custom-node installs to be
+# serial: every file is independent, has its own .part, and touches nothing
+# shared. The ceiling is disk write throughput, so this stays modest.
+JOBS="${MODEL_DL_JOBS:-4}"
+case "$JOBS" in ''|*[!0-9]*) JOBS=4 ;; esac
+[ "$JOBS" -lt 1 ] && JOBS=1
+
+STATUS_DIR="$(mktemp -d)"
+PARTS_LIST="$STATUS_DIR/.parts"
+: > "$PARTS_LIST"
 while IFS=$'\t' read -r set dest size url; do
     [ -n "$dest" ] || continue
-    download_one "$dest" "$size" "$url"
+    printf '%s\t%s\n' "$ASSETS_ROOT/$dest" "$size" >> "$PARTS_LIST"
 done <<< "${TODO%$'\n'}"
+
+# Bytes of the requested set currently on disk: the finished file if it has been
+# renamed, else whatever its .part has so far.
+bytes_on_disk() {
+    local t s total=0 n
+    while IFS=$'\t' read -r t s; do
+        [ -n "$t" ] || continue
+        if [ -f "$t" ]; then n="$(stat -c %s "$t" 2>/dev/null || echo 0)"
+        elif [ -f "$t.part" ]; then n="$(stat -c %s "$t.part" 2>/dev/null || echo 0)"
+        else n=0; fi
+        total=$((total + n))
+    done < "$PARTS_LIST"
+    echo "$total"
+}
+
+# One aggregate progress line for the whole run. Per-file lines would interleave
+# unreadably with several transfers in flight, and the number an operator
+# actually wants is "how long until the library is here".
+monitor_progress() {
+    local start last_t last_b now total rate eta pct active
+    start="$(date +%s)"; last_t="$start"; last_b=0
+    while [ -e "$STATUS_DIR/.running" ]; do
+        local waited=0
+        while [ "$waited" -lt "$PROGRESS_INTERVAL" ] && [ -e "$STATUS_DIR/.running" ]; do
+            sleep 1; waited=$((waited + 1))
+        done
+        [ -e "$STATUS_DIR/.running" ] || break
+        total="$(bytes_on_disk)"
+        now="$(date +%s)"
+        rate=$(( (total - last_b) / ((now - last_t) > 0 ? (now - last_t) : 1) ))
+        active="$(find "$STATUS_DIR" -maxdepth 1 -name '.active-*' 2>/dev/null | wc -l)"
+        pct=0; [ "$NEED_BYTES" -gt 0 ] && pct=$(( total * 100 / NEED_BYTES ))
+        if [ "$rate" -gt 0 ]; then
+            eta="$(fmt_secs $(( (NEED_BYTES - total) / rate )))"
+        else
+            eta="stalled"
+        fi
+        log "  progress: $(human "$total") / $(human "$NEED_BYTES") (${pct}%) | ${active} active | $(( rate / 1000000 )) MB/s | eta $eta"
+        last_t="$now"; last_b="$total"
+    done
+}
+
+log "  downloading with $JOBS concurrent transfer(s)"
+touch "$STATUS_DIR/.running"
+[ -t 2 ] || { monitor_progress & MONITOR_PID=$!; }
+
+IDX=0
+while IFS=$'\t' read -r set dest size url; do
+    [ -n "$dest" ] || continue
+    IDX=$((IDX + 1))
+    # Wait for a free slot.
+    while [ "$(jobs -rp | wc -l)" -ge "$((JOBS + ${MONITOR_PID:+1}))" ]; do sleep 1; done
+    (
+        touch "$STATUS_DIR/.active-$IDX"
+        download_one "$dest" "$size" "$url" "$IDX"
+        rm -f "$STATUS_DIR/.active-$IDX"
+    ) &
+done <<< "${TODO%$'\n'}"
+
+# Wait for the transfers, then stop the monitor.
+for p in $(jobs -rp); do
+    [ "${MONITOR_PID:-}" = "$p" ] && continue
+    wait "$p" 2>/dev/null || true
+done
+rm -f "$STATUS_DIR/.running"
+[ -n "${MONITOR_PID:-}" ] && wait "$MONITOR_PID" 2>/dev/null || true
+
+# Collect what the workers recorded. Arrays cannot cross a subshell boundary,
+# so each writes a one-line result file and the parent reads them back.
+for f in "$STATUS_DIR"/[0-9]*; do
+    [ -f "$f" ] || continue
+    IFS=$'\t' read -r st detail < "$f"
+    case "$st" in
+        ok)   FETCHED=$((FETCHED + 1)) ;;
+        fail) FAILED+=("$detail") ;;
+    esac
+done
+rm -rf "$STATUS_DIR"
 
 # ── Report ──────────────────────────────────────────────────────────────────
 echo ""

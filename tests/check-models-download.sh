@@ -385,11 +385,14 @@ MODEL_MANIFEST="$T/slow.txt" MODEL_SETS="" MODEL_PROGRESS_INTERVAL=1 \
     bash "$SH" slow > "$T/slow.log" 2>&1
 kill "$(cat "$T/slow.pid" 2>/dev/null)" 2>/dev/null
 
-grep -qE 'slow\.safetensors: .*%\)' "$T/slow.log" \
+# Aggregate, not per-file: with several transfers in flight, per-file lines
+# interleave into noise, and "how long until the library is here" is the number
+# an operator actually needs.
+grep -qE 'progress: .*%\).*eta' "$T/slow.log" \
     || fail "no progress lines in a non-TTY log — it would look hung: $(cat "$T/slow.log")"
-grep -q 'complete in' "$T/slow.log" || fail "should report elapsed time on completion"
-grep -qE '\[1/1\]' "$T/slow.log" || fail "should show which file of how many"
-ticks=$(grep -cE 'slow\.safetensors: .*%\)' "$T/slow.log")
+grep -q 'done slow' "$T/slow.log" || fail "should report each file finishing"
+grep -qE '\[1/1\] start' "$T/slow.log" || fail "should show which file of how many"
+ticks=$(grep -cE 'progress: .*%\)' "$T/slow.log")
 echo "  $ticks progress line(s), a file counter, and a completion time"
 # And no \r smear from curl's bar leaking into the file.
 grep -q $'\r' "$T/slow.log" && fail "carriage returns leaked into the log — curl's bar is not log-safe"
@@ -454,6 +457,49 @@ echo "  token value never appears in the log output"
 kill "$(cat "$T/echo.pid" 2>/dev/null)" 2>/dev/null
 echo "  no --location-trusted in code; curl drops auth across hosts by default"
 echo "PASS: token is used where it should be, and never logged"
+
+echo ""
+echo "=== 8h. concurrent downloads: correct bytes, and actually concurrent ==="
+# HuggingFace throttles per connection, so one stream degrades badly over a long
+# pull — sequential moved ten files in an hour. Concurrency is the fix, but only
+# if every byte still lands correctly and partials still resume.
+mkdir -p "$T/many"
+for i in 1 2 3 4; do head -c 700000 /dev/urandom > "$T/many/m$i.bin"; done
+MSZ=$(stat -c %s "$T/many/m1.bin")
+cp "$T/many"/*.bin "$T/srv/"
+{ echo "[many]"
+  for i in 1 2 3 4; do echo "models/vae/m$i.safetensors  $MSZ  $BASE/m$i.bin"; done
+} > "$T/many.txt"
+
+# A partial, so resume is exercised while other transfers are in flight.
+mkdir -p "$COLOSSUL_ASSETS_ROOT/models/vae"
+head -c 200000 "$T/many/m2.bin" > "$COLOSSUL_ASSETS_ROOT/models/vae/m2.safetensors.part"
+
+out="$(MODEL_MANIFEST="$T/many.txt" MODEL_SETS="" MODEL_DL_JOBS=4 \
+       MODEL_PROGRESS_INTERVAL=1 bash "$SH" many 2>&1)"
+for i in 1 2 3 4; do
+    cmp -s "$COLOSSUL_ASSETS_ROOT/models/vae/m$i.safetensors" "$T/many/m$i.bin" \
+        || fail "m$i is not byte-identical after a concurrent run: $out"
+done
+echo "  4/4 byte-identical with 4 workers"
+grep -qi 'resuming m2' <<< "$out" || fail "the pre-seeded partial was not resumed: $out"
+echo "  a partial still resumed while other transfers were running"
+[ -z "$(find "$COLOSSUL_ASSETS_ROOT" -name '*.part' 2>/dev/null)" ] \
+    || fail "left .part files behind after a successful concurrent run"
+echo "  no .part files left behind"
+
+# Results must survive the subshell boundary — bash arrays do not, so a worker's
+# success or failure has to be recorded on disk or the summary silently reads
+# "0 downloaded" after a perfect run.
+grep -q 'Models: 4 downloaded' <<< "$out" \
+    || fail "worker results did not reach the parent (arrays don't cross subshells): $out"
+echo "  worker results collected across the subshell boundary"
+
+# Concurrency must be real, not just requested.
+grep -q '4 concurrent' <<< "$out" || fail "should state the concurrency it used: $out"
+starts=$(grep -c 'start m' <<< "$out")
+[ "$starts" = "4" ] || fail "expected 4 start lines, got $starts"
+echo "PASS: parallel downloads are correct and resumable"
 
 echo ""
 echo "=== 9b. downloads NEVER block the seats from starting ==="
