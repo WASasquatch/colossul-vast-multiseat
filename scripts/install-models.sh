@@ -47,7 +47,13 @@ parse_manifest() {
             # The size is optional: "dest url" and "dest bytes url" are both
             # valid. Detected by whether field 2 looks like a URL, so nobody has
             # to go and find a byte count just to add a model.
-            if ($2 ~ /^[a-z][a-z0-9+.-]*:\/\//) { size = "-"; url = $2 }
+            #
+            # "dest link:<other-dest>" is a third form: the same weights under a
+            # second name. ComfyUI resolves a model name inside its category
+            # folder, so a file loaded as both a VAE and a text encoder must
+            # exist in both — linking avoids downloading 46 GB twice.
+            if ($2 ~ /^link:/)                  { size = "0";  url = $2 }
+            else if ($2 ~ /^[a-z][a-z0-9+.-]*:\/\//) { size = "-"; url = $2 }
             else                                { size = $2;  url = $3 }
             if (dest == "" || url == "") next
             if (size == "") size = "-"
@@ -329,6 +335,12 @@ if [ "$CHECK_ONLY" = "1" ]; then
     exit 1
 fi
 
+# ── Split out the link entries ──────────────────────────────────────────────
+# They cost no bandwidth and must be created AFTER their source exists, so they
+# are held aside rather than run through the download machinery.
+LINKS="$(awk -F'\t' '$4 ~ /^link:/' <<< "$SELECTED")"
+SELECTED="$(awk -F'\t' '$4 !~ /^link:/' <<< "$SELECTED")"
+
 # Fill in any omitted size by asking the server, so the disk precheck,
 # skip-if-complete and truncation detection all work whether or not a byte
 # count was written down. One HEAD per unsized entry; a manifest that declares
@@ -377,11 +389,11 @@ TODO_COUNT=$(grep -c . <<< "${TODO%$'\n'}" 2>/dev/null || echo 0)
 log "Model sets: ${WANT[*]}"
 announce_auth
 [ "$SKIPPED" -gt 0 ] && log "  $SKIPPED file(s) already present and complete — skipping"
-if [ "$TODO_COUNT" -eq 0 ]; then
+if [ "$TODO_COUNT" -eq 0 ] && [ -z "${LINKS//[[:space:]]/}" ]; then
     log "Everything requested is already downloaded."
     exit 0
 fi
-log "  $TODO_COUNT file(s) to fetch, $(human "$NEED_BYTES")"
+[ "$TODO_COUNT" -gt 0 ] && log "  $TODO_COUNT file(s) to fetch, $(human "$NEED_BYTES")"
 
 # ── Disk check, before anything starts ──────────────────────────────────────
 # Filling the disk 90% into a 20 GB file wedges provisioning in a way that is
@@ -544,7 +556,7 @@ monitor_progress() {
     done
 }
 
-log "  downloading with $JOBS concurrent transfer(s)"
+[ "$TODO_COUNT" -gt 0 ] && log "  downloading with $JOBS concurrent transfer(s)"
 touch "$STATUS_DIR/.running"
 [ -t 2 ] || { monitor_progress & MONITOR_PID=$!; }
 
@@ -581,9 +593,45 @@ for f in "$STATUS_DIR"/[0-9]*; do
 done
 rm -rf "$STATUS_DIR"
 
+# ── Second names for the same weights ───────────────────────────────────────
+# Hardlink by preference: no extra bytes, no dangling target if something later
+# moves, and ComfyUI reads it as an ordinary file. Symlink only when the two
+# paths are on different filesystems, where a hardlink is impossible.
+LINKED=0
+if [ -n "${LINKS//[[:space:]]/}" ]; then
+    while IFS=$'\t' read -r set dest size url; do
+        [ -n "$dest" ] || continue
+        src="$ASSETS_ROOT/${url#link:}"
+        tgt="$ASSETS_ROOT/$dest"
+        name="$(basename "$dest")"
+        if [ ! -f "$src" ]; then
+            warn "  link source missing for $name: ${url#link:}"
+            warn "  (its set was probably not selected — nothing to link to)"
+            FAILED+=("$dest (link source missing)")
+            continue
+        fi
+        # Already correct? Same inode means the hardlink is in place.
+        if [ -e "$tgt" ] && [ "$(stat -c %i "$tgt" 2>/dev/null)" = "$(stat -c %i "$src" 2>/dev/null)" ]; then
+            continue
+        fi
+        mkdir -p "$(dirname "$tgt")"
+        rm -f "$tgt"
+        if ln "$src" "$tgt" 2>/dev/null; then
+            log "  linked $dest -> ${url#link:}"
+            LINKED=$((LINKED + 1))
+        elif ln -s "$src" "$tgt" 2>/dev/null; then
+            log "  symlinked $dest -> ${url#link:} (different filesystem)"
+            LINKED=$((LINKED + 1))
+        else
+            warn "  could not link $name"
+            FAILED+=("$dest (link)")
+        fi
+    done <<< "${LINKS%$'\n'}"
+fi
+
 # ── Report ──────────────────────────────────────────────────────────────────
 echo ""
-log "Models: $FETCHED downloaded, $SKIPPED already present."
+log "Models: $FETCHED downloaded, $SKIPPED already present.$( [ "$LINKED" -gt 0 ] && printf ' %s linked.' "$LINKED" )"
 if [ "${#FAILED[@]}" -gt 0 ]; then
     warn "${#FAILED[@]} file(s) did not complete:"
     for f in "${FAILED[@]}"; do warn "    $f"; done

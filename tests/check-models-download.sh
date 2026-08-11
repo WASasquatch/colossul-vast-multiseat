@@ -535,6 +535,50 @@ starts=$(grep -c 'start m' <<< "$out")
 echo "PASS: parallel downloads are correct and resumable"
 
 echo ""
+echo "=== 8i. link: gives one file a second name, without a second download ==="
+# ComfyUI resolves a model name inside its category folder, so a file loaded as
+# both a checkpoint and a VAE must exist in both. LTX 2.3's all-in-one build is
+# 46 GB; fetching it per loader would be 138 GB.
+cat > "$T/link.txt" <<EOF
+[aliased]
+models/checkpoints/aio.safetensors  $SMALL_SIZE  $BASE/small.bin
+models/vae/aio.safetensors  link:models/checkpoints/aio.safetensors
+models/text_encoders/aio.safetensors  link:models/checkpoints/aio.safetensors
+EOF
+rm -rf "$COLOSSUL_ASSETS_ROOT/models/checkpoints" "$COLOSSUL_ASSETS_ROOT/models/vae/aio.safetensors"
+out="$(MODEL_MANIFEST="$T/link.txt" MODEL_SETS="" bash "$SH" aliased 2>&1)"
+CK="$COLOSSUL_ASSETS_ROOT/models/checkpoints/aio.safetensors"
+for p in vae text_encoders; do
+    f="$COLOSSUL_ASSETS_ROOT/models/$p/aio.safetensors"
+    [ -f "$f" ] || fail "link not created at models/$p/aio.safetensors: $out"
+    cmp -s "$f" "$T/srv/small.bin" || fail "linked file has wrong content at models/$p"
+done
+# One copy on disk: same inode as the source.
+[ "$(stat -c %i "$CK")" = "$(stat -c %i "$COLOSSUL_ASSETS_ROOT/models/vae/aio.safetensors")" ] \
+    || fail "link is a separate copy, not a link — a 46 GB file would be duplicated"
+echo "  3 usable names, 1 inode, 1 download"
+
+# A deleted link must be repaired, even though the download is complete.
+rm -f "$COLOSSUL_ASSETS_ROOT/models/vae/aio.safetensors"
+out="$(MODEL_MANIFEST="$T/link.txt" MODEL_SETS="" bash "$SH" aliased 2>&1)"
+[ -f "$COLOSSUL_ASSETS_ROOT/models/vae/aio.safetensors" ] \
+    || fail "a deleted link was not restored on re-run — it would stay missing forever: $out"
+echo "  a deleted link is restored on re-run"
+
+# A link whose source was not selected must be reported, not silently skipped.
+cat > "$T/link2.txt" <<EOF
+[src]
+models/checkpoints/nope.safetensors  $SMALL_SIZE  $BASE/small.bin
+[alias]
+models/vae/nope.safetensors  link:models/checkpoints/nope.safetensors
+EOF
+out="$(MODEL_MANIFEST="$T/link2.txt" MODEL_SETS="" bash "$SH" alias 2>&1)"
+grep -qi 'link source missing' <<< "$out" \
+    || fail "a link with no source should be reported: $out"
+echo "  a link with an unselected source is reported"
+echo "PASS: aliased models resolve from every loader"
+
+echo ""
 echo "=== 9b. downloads NEVER block the seats from starting ==="
 # The default is now every set — hundreds of gigabytes. Downloading that inline
 # would leave four artists staring at a dead instance for an hour, for something
@@ -599,15 +643,26 @@ grep -q 'cdn\.hf\.co' <<< "$ENTRY_LINES" && fail "models.txt uses cdn.hf.co link
 
 # Every entry must be dest + size + url, in that order, or the parser silently
 # drops it and the model just never appears.
+link_targets=()
 while IFS= read -r l; do
     [ -n "$l" ] || continue
     read -r d s u _ <<< "$l"
-    case "$s" in *://*) u="$s"; s="-" ;; esac   # two-field form: dest url
+    case "$d" in models/*) ;; *) fail "dest should live under models/: $l" ;; esac
+    case "$s" in
+        link:*)  link_targets+=("${s#link:}"); continue ;;   # dest link:other
+        *://*)   u="$s"; s="-" ;;                            # dest url
+    esac
     [ -n "$u" ] || fail "entry has no URL (needs 'dest [bytes] url'): $l"
     case "$u" in http://*|https://*) ;; *) fail "URL field is not a URL: $l" ;; esac
     case "$s" in -|[0-9]*) ;; *) fail "size field must be bytes or omitted: $l" ;; esac
-    case "$d" in models/*) ;; *) fail "dest should live under models/: $l" ;; esac
 done <<< "$ENTRY_LINES"
+
+# Every link must point at a real entry, or it silently produces nothing.
+for t in ${link_targets[@]+"${link_targets[@]}"}; do
+    grep -qE "^[[:space:]]*${t//./\\.}[[:space:]]" <<< "$ENTRY_LINES" \
+        || fail "link target is not an entry in this manifest: $t"
+done
+[ "${#link_targets[@]}" -eq 0 ] || echo "  ${#link_targets[@]} link(s), all pointing at real entries"
 n=$(grep -c . <<< "$ENTRY_LINES")
 echo "  $n entry lines, all canonical URLs, no credentials"
 echo "PASS: manifest is clean"

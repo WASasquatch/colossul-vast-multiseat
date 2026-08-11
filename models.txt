@@ -4,6 +4,7 @@
 #
 #     <dest-path>  <url>              <- the easy way; size looked up for you
 #     <dest-path>  <bytes>  <url>     <- size pinned
+#     <dest-path>  link:<other-dest>  <- same weights under a second name
 #
 #   dest-path  relative to ComfyUI_Assets/, e.g. models/vae/foo.safetensors.
 #              Written first so the layout reads at a glance, and so a file can
@@ -14,7 +15,20 @@
 #              turns a file that silently changed upstream into a visible error.
 #              Fill them all in automatically with:
 #                  colossul models --sizes > models.txt.new
-#   url        direct download URL.
+#   url        direct download URL, or link:<dest-path-of-another-entry>.
+#
+#              PATHS MUST MATCH THE WORKFLOWS EXACTLY. ComfyUI resolves a model
+#              name inside its category folder, so a workflow saved with
+#              "Qwen\Edit\foo.safetensors" needs
+#              models/loras/Qwen/Edit/foo.safetensors — a flat
+#              models/loras/foo.safetensors downloads perfectly and still leaves
+#              a red node. Check with:
+#                  tools/workflow-parity.py <scanner-report.csv>
+#
+#              link: gives one file a second name, hardlinked (symlinked across
+#              filesystems), for models a workflow loads through more than one
+#              loader — e.g. LTX 2.3's all-in-one file, which is a checkpoint, a
+#              VAE and a text encoder at once. Downloaded once, not three times.
 #
 #              Use canonical huggingface.co/<repo>/resolve/main/... links.
 #              Do NOT paste the us.aws.cdn.hf.co links the website hands you:
@@ -169,7 +183,7 @@ models/diffusion_models/wan2.1_vace_14B_fp16.safetensors  34675323640  https://h
 [wan21-wrapper-speed]
 models/loras/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors  1466506280  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors
 models/loras/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors  738005744  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors
-models/loras/Wan21_T2V_14B_MoviiGen_lora_rank32_fp16.safetensors  316822496  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan21_T2V_14B_MoviiGen_lora_rank32_fp16.safetensors
+models/loras/Fusion_Deps/Wan21_T2V_14B_MoviiGen_lora_rank32_fp16.safetensors  316822496  https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan21_T2V_14B_MoviiGen_lora_rank32_fp16.safetensors
 
 # ── Lip-sync / voice (voice_sync_test_*) ────────────────────────────────────
 # InfiniteTalk plus the audio front-end. Needs [wan21-wrapper] too.  5.8 GB
@@ -212,8 +226,14 @@ models/checkpoints/sam3.1_multiplex_fp16.safetensors  1745546848  https://huggin
 # One 46 GB all-in-one file: the workflow points its checkpoint loader, audio VAE
 # loader AND text-encoder loader at the same name. Distinct from the -fp8 builds
 # in [ltx-2.3] above.  46.1 GB
+# The workflow points its checkpoint loader, its audio VAE loader AND its text
+# encoder loader at this one name. ComfyUI resolves each inside its own category
+# folder, so the file has to exist in all three — downloaded once, then linked,
+# rather than fetched three times for 138 GB.
 [ltx-2.3-distilled-1.1]
 models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors  46149345334  https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-1.1.safetensors
+models/vae/ltx-2.3-22b-distilled-1.1.safetensors  link:models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors
+models/text_encoders/ltx-2.3-22b-distilled-1.1.safetensors  link:models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors
 
 # ── Qwen image editing, the variants our workflows load ─────────────────────
 # 2512 is the base image model (BG-plate work); the FP8 edit build is a lighter
@@ -222,7 +242,7 @@ models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors  46149345334  https://h
 models/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors  20430679144  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_2512_fp8_e4m3fn.safetensors
 models/diffusion_models/Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors  20430635176  https://huggingface.co/1038lab/Qwen-Image-Edit-2511-FP8/resolve/main/Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors
 models/controlnet/Qwen-Image-2512-Fun-Controlnet-Union-2602.safetensors  3512432536  https://huggingface.co/alibaba-pai/Qwen-Image-2512-Fun-Controlnet-Union/resolve/main/Qwen-Image-2512-Fun-Controlnet-Union-2602.safetensors
-models/loras/qwen-image-edit-2511-multiple-angles-lora.safetensors  295140688  https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/resolve/main/qwen-image-edit-2511-multiple-angles-lora.safetensors
+models/loras/Qwen/Edit/qwen-image-edit-2511-multiple-angles-lora.safetensors  295140688  https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/resolve/main/qwen-image-edit-2511-multiple-angles-lora.safetensors
 
 # ── Video Depth Anything ────────────────────────────────────────────────────
 # 12 workflows. The node pack does NOT fetch this itself.  0.5 GB
@@ -378,4 +398,4 @@ models/vae/wan_2.1_vae.safetensors  253815318  https://huggingface.co/Comfy-Org/
 models/diffusion_models/qwen_image_edit_2511_bf16.safetensors  40861031560  https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/resolve/main/split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors
 models/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors  9384670680  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
 models/vae/qwen_image_vae.safetensors  253806246  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors
-models/loras/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors  849608296  https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+models/loras/Qwen/Edit/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors  849608296  https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
