@@ -44,7 +44,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # COLOSSUL_ROOT is left unset here so lib/common.sh can derive it from
 # $WORKSPACE, which the base image owns and an operator may relocate.
 # ─────────────────────────────────────────────────────────────────────────────
-ENV NUM_SEATS=4 \
+# NUM_SEATS=auto means one seat per GPU, decided at boot from nvidia-smi: rent a
+# 2-GPU box and you get 2 seats, an 8-GPU box and you get 8. A number forces the
+# count instead (seats then share cards, which is fine for testing and is warned
+# about). Capped by MAX_SEATS, below.
+ENV NUM_SEATS=auto \
+    MAX_SEATS=8 \
     COLOSSUL_ETC=/etc/colossul \
     COLOSSUL_LIB=/opt/colossul \
     STORYRENDR_REPO=https://github.com/WASasquatch/storyrendr-services.git \
@@ -85,10 +90,23 @@ ENV MODEL_SETS=all
 # whose READMEs describe gating services on this variable.
 ENV OPEN_BUTTON_PORT=1111
 
-# Instance Portal entries for the default 4 seats. Regenerate with
-# `colossul-portal-config <n>` if you change NUM_SEATS, and update the
-# template's exposed-port list to match.
-ENV PORTAL_CONFIG="localhost:1111:11111:/:Instance Portal|localhost:8080:18080:/:Jupyter|localhost:8190:18190:/:Seat 0 Storyrendr|localhost:8191:18191:/:Seat 0 ComfyUI|localhost:8200:18200:/:Seat 1 Storyrendr|localhost:8201:18201:/:Seat 1 ComfyUI|localhost:8210:18210:/:Seat 2 Storyrendr|localhost:8211:18211:/:Seat 2 ComfyUI|localhost:8220:18220:/:Seat 3 Storyrendr|localhost:8221:18221:/:Seat 3 ComfyUI"
+# Instance Portal entries for the MAXIMUM seat count, not the actual one.
+#
+# The base image turns this into /etc/portal.yaml at boot, before provisioning
+# has looked at the GPUs, so it cannot be sized to the machine. Listing all 8
+# means a seat always has a portal entry and a tunnel waiting for it; entries
+# above the GPU count point at ports nothing is listening on.
+#
+# The cost is real: every entry gets a Cloudflare quick tunnel, so a 1-GPU box
+# still requests 18 of them, and Cloudflare rate-limits bursts (error 1015).
+# The READY block and ACCESS.log only ever list seats that exist, so hand those
+# links to artists rather than the portal page, where the surplus entries show
+# as dead links.
+#
+# Regenerate with `colossul-portal-config <n>`, and keep the template's exposed
+# port list a superset:
+#   1111,8080,8190,8191,8200,8201,8210,8211,8220,8221,8230,8231,8240,8241,8250,8251,8260,8261
+ENV PORTAL_CONFIG="localhost:1111:11111:/:Instance Portal|localhost:8080:18080:/:Jupyter|localhost:8190:18190:/:Seat 0 Storyrendr|localhost:8191:18191:/:Seat 0 ComfyUI|localhost:8200:18200:/:Seat 1 Storyrendr|localhost:8201:18201:/:Seat 1 ComfyUI|localhost:8210:18210:/:Seat 2 Storyrendr|localhost:8211:18211:/:Seat 2 ComfyUI|localhost:8220:18220:/:Seat 3 Storyrendr|localhost:8221:18221:/:Seat 3 ComfyUI|localhost:8230:18230:/:Seat 4 Storyrendr|localhost:8231:18231:/:Seat 4 ComfyUI|localhost:8240:18240:/:Seat 5 Storyrendr|localhost:8241:18241:/:Seat 5 ComfyUI|localhost:8250:18250:/:Seat 6 Storyrendr|localhost:8251:18251:/:Seat 6 ComfyUI|localhost:8260:18260:/:Seat 7 Storyrendr|localhost:8261:18261:/:Seat 7 ComfyUI"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # System dependencies the app needs but the ComfyUI base image doesn't carry:

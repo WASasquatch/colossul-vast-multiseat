@@ -452,6 +452,34 @@ and the Dockerfile `ENV` defaults (`COMFYUI_REF`, `MODEL_SETS`,
 `ENABLE_COMFYUI_MANAGER`) — the values already in the container's environment
 stay as they are. For those, rent a new instance on a newer image tag.
 
+### Seats
+
+**One seat per GPU, decided at boot.** Rent a 2-GPU machine and you get 2 seats;
+an 8-GPU machine gives 8. Nothing to configure — `NUM_SEATS=auto` is the
+default, and `nvidia-smi` decides.
+
+```
+-e NUM_SEATS=2      force a count (seats then share cards; it says so)
+-e MAX_SEATS=10     raise the cap (default 8)
+-e GPU_MAP=2,3      pin seats to specific GPUs
+```
+
+The cap is 8 because Vast's own filter goes 1–8 and then a "9+" bucket with
+almost nothing in it. The port math is clean to 16 if you ever need more.
+
+Detection degrades safely: no GPU, a failing `nvidia-smi`, or no `nvidia-smi` at
+all all give one working seat rather than zero.
+
+> **The Instance Portal always lists 8 seats.** The base image turns
+> `PORTAL_CONFIG` into `/etc/portal.yaml` before provisioning has looked at the
+> GPUs, so it can't be sized to the machine — and a seat with *no* entry would
+> get no tunnel and no URL, i.e. run and be silently unreachable. Listing the
+> maximum is the safe direction, but entries above your GPU count are dead
+> links, and each one still asks Cloudflare for a quick tunnel (18 on any
+> machine), which is worth knowing if tunnels come up slowly. **Hand artists the
+> links from the READY block or `ACCESS.log`** — those only ever list seats that
+> exist.
+
 ### Persistent storage (Vast volumes)
 
 Vast has two kinds of storage and they behave completely differently:

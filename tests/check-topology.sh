@@ -113,8 +113,14 @@ echo "=== 4. GPU_MAP override is honoured ==="
 echo "PASS: GPU_MAP remaps, identity is the default"
 
 echo ""
-echo "=== 5. baked PORTAL_CONFIG matches the port math ==="
-generated="$(bash "$ROOT/scripts/bin/colossul-portal-config" 4 | grep '^PORTAL_CONFIG=' | sed 's/^PORTAL_CONFIG=//; s/^"//; s/"$//')"
+echo "=== 5. baked PORTAL_CONFIG matches the port math, at MAX_SEATS ==="
+# Sized to the MAXIMUM, not the running count. The base image turns
+# PORTAL_CONFIG into /etc/portal.yaml before provisioning has looked at the
+# GPUs, so it cannot be sized to the machine — and a seat with no portal entry
+# gets no tunnel and no URL, i.e. it runs and is silently unreachable.
+MAXSEATS="$(grep -oE '^ *MAX_SEATS=[0-9]+' "$ROOT/Dockerfile" | grep -oE '[0-9]+' | head -1)"
+[ -n "$MAXSEATS" ] || fail "Dockerfile does not declare MAX_SEATS"
+generated="$(bash "$ROOT/scripts/bin/colossul-portal-config" "$MAXSEATS" | grep '^PORTAL_CONFIG=' | sed 's/^PORTAL_CONFIG=//; s/^"//; s/"$//')"
 baked="$(grep -o 'ENV PORTAL_CONFIG="[^"]*"' "$ROOT/Dockerfile" | sed 's/^ENV PORTAL_CONFIG="//; s/"$//')"
 [ -n "$generated" ] || fail "could not generate a PORTAL_CONFIG"
 [ -n "$baked" ] || fail "could not find PORTAL_CONFIG in the Dockerfile"

@@ -166,13 +166,52 @@ assert_no_reserved_collisions() {
     return 0
 }
 
+# How many GPUs this machine actually has. 0 if it cannot be determined.
+detect_gpu_count() {
+    local n=0
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        n="$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ' || true)"
+    fi
+    case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    echo "$n"
+}
+
+# Above this, the port math starts running into the base image's own services,
+# and Vast has very few machines with more anyway — its filter goes 1..8 and
+# then a "9+" bucket with almost nothing in it.
+MAX_SEATS="${MAX_SEATS:-8}"
+
 num_seats() {
-    local n="${NUM_SEATS:-4}"
+    local n="${NUM_SEATS:-auto}"
+
+    # One seat per GPU by default. A rented box's GPU count is the only sensible
+    # answer, and hardcoding 4 either wastes GPUs or oversubscribes them.
+    if [ "$n" = "auto" ] || [ -z "$n" ]; then
+        n="$(detect_gpu_count)"
+        if [ "$n" -lt 1 ]; then
+            warn "Could not detect any GPU (nvidia-smi missing or failed) - using 1 seat."
+            echo 1; return
+        fi
+        if [ "$n" -gt "$MAX_SEATS" ]; then
+            warn "Detected $n GPUs; capping at MAX_SEATS=$MAX_SEATS."
+            n="$MAX_SEATS"
+        fi
+        echo "$n"; return
+    fi
+
     case "$n" in
-        ''|*[!0-9]*) warn "NUM_SEATS='$n' is not a number - falling back to 4"; echo 4; return ;;
+        *[!0-9]*) warn "NUM_SEATS='$n' is not a number or 'auto' - falling back to 1"; echo 1; return ;;
     esac
     if [ "$n" -lt 1 ]; then
         warn "NUM_SEATS=$n < 1 - falling back to 1"; echo 1; return
+    fi
+
+    # An explicit count is honoured even when it exceeds the GPUs — sharing one
+    # card across seats is a legitimate thing to do for testing — but say so,
+    # because otherwise it looks like the GPU pinning is broken.
+    local gpus; gpus="$(detect_gpu_count)"
+    if [ "$gpus" -gt 0 ] && [ "$n" -gt "$gpus" ]; then
+        warn "NUM_SEATS=$n but this machine has $gpus GPU(s): seats will share cards."
     fi
     echo "$n"
 }

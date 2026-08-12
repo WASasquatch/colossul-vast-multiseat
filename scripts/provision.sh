@@ -42,6 +42,17 @@ echo ""
 log "=============================================="
 log " Colossul multi-seat provisioning — $SEAT_COUNT seat(s)"
 log "=============================================="
+_gpus="$(detect_gpu_count)"
+if [ "${NUM_SEATS:-auto}" = "auto" ] || [ -z "${NUM_SEATS:-}" ]; then
+    log "  $_gpus GPU(s) detected -> $SEAT_COUNT seat(s), one per GPU."
+    log "  Force a different count with -e NUM_SEATS=<n>."
+else
+    log "  NUM_SEATS=$NUM_SEATS set explicitly ($_gpus GPU(s) present)."
+fi
+if [ "$SEAT_COUNT" -lt 8 ]; then
+    log "  The Instance Portal lists 8 seats regardless; entries above $SEAT_COUNT"
+    log "  are dead. Give artists the links from the READY block below instead."
+fi
 
 # Refuse to build a layout that would crash-loop against a base-image service
 # (ComfyUI 18188, its API wrapper 18288, jupyter 18080, ...).

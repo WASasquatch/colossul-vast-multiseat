@@ -64,6 +64,9 @@ bash tests/check-seat-argv.sh || rc=1
 note "UPDATE PATH"
 bash tests/check-update-path.sh || rc=1
 
+note "SEAT COUNT"
+bash tests/check-seat-count.sh || rc=1
+
 note "TOPOLOGY"
 bash tests/check-topology.sh || rc=1
 
