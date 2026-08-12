@@ -470,15 +470,28 @@ almost nothing in it. The port math is clean to 16 if you ever need more.
 Detection degrades safely: no GPU, a failing `nvidia-smi`, or no `nvidia-smi` at
 all all give one working seat rather than zero.
 
-> **The Instance Portal always lists 8 seats.** The base image turns
-> `PORTAL_CONFIG` into `/etc/portal.yaml` before provisioning has looked at the
-> GPUs, so it can't be sized to the machine — and a seat with *no* entry would
-> get no tunnel and no URL, i.e. run and be silently unreachable. Listing the
-> maximum is the safe direction, but entries above your GPU count are dead
-> links, and each one still asks Cloudflare for a quick tunnel (18 on any
-> machine), which is worth knowing if tunnels come up slowly. **Hand artists the
-> links from the READY block or `ACCESS.log`** — those only ever list seats that
-> exist.
+**The Instance Portal shows exactly the seats that exist** — no dead links, and
+no tunnels requested for seats that aren't there.
+
+That has to happen in the image's entrypoint rather than in provisioning. The
+portal reads `PORTAL_CONFIG` once, on first boot, to write `/etc/portal.yaml`,
+and per Vast's docs nothing re-reads that file while running. So the entrypoint
+counts GPUs and rewrites `PORTAL_CONFIG` before the base image ever sees it,
+then `exec`s `/opt/instance-tools/bin/entrypoint.sh`. Editing `portal.yaml`
+afterwards would mean an undocumented schema, restarting two services, and
+rebuilding every tunnel with new URLs.
+
+Set `COLOSSUL_PORTAL_AUTOSIZE=0` to keep the image's full 8-seat config.
+
+> The `PORTAL_CONFIG` baked into the image still lists all 8, as the fallback
+> for anything that bypasses the entrypoint. A surplus entry is a dead link; a
+> *missing* one means a seat with no tunnel and no URL, running and unreachable
+> — so the fallback errs long. **Vast's SSH and Jupyter launch modes replace the
+> entrypoint**, so neither the sizing nor supervisord runs under them. Docker
+> ENTRYPOINT mode remains mandatory.
+>
+> The template's exposed-port list is fixed at rent time and can't adapt, so
+> keep it at the full range regardless.
 
 ### Persistent storage (Vast volumes)
 

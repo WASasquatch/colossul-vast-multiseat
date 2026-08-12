@@ -90,21 +90,17 @@ ENV MODEL_SETS=all
 # whose READMEs describe gating services on this variable.
 ENV OPEN_BUTTON_PORT=1111
 
-# Instance Portal entries for the MAXIMUM seat count, not the actual one.
+# Instance Portal entries — the FALLBACK, sized to the maximum.
 #
-# The base image turns this into /etc/portal.yaml at boot, before provisioning
-# has looked at the GPUs, so it cannot be sized to the machine. Listing all 8
-# means a seat always has a portal entry and a tunnel waiting for it; entries
-# above the GPU count point at ports nothing is listening on.
+# entrypoint.sh normally replaces this with one sized to the machine's actual
+# GPU count, before the base image turns it into /etc/portal.yaml. This value is
+# what survives if that never runs (a launch mode that replaces the entrypoint,
+# or COLOSSUL_PORTAL_AUTOSIZE=0). Listing all 8 is the safe fallback: a seat
+# with no portal entry gets no tunnel and no URL, so it would run and be
+# unreachable, whereas a surplus entry is only a dead link.
 #
-# The cost is real: every entry gets a Cloudflare quick tunnel, so a 1-GPU box
-# still requests 18 of them, and Cloudflare rate-limits bursts (error 1015).
-# The READY block and ACCESS.log only ever list seats that exist, so hand those
-# links to artists rather than the portal page, where the surplus entries show
-# as dead links.
-#
-# Regenerate with `colossul-portal-config <n>`, and keep the template's exposed
-# port list a superset:
+# Regenerate with `colossul-portal-config <n>`. Keep the template's exposed port
+# list at the maximum regardless — it is fixed at rent time and cannot adapt:
 #   1111,8080,8190,8191,8200,8201,8210,8211,8220,8221,8230,8231,8240,8241,8250,8251,8260,8261
 ENV PORTAL_CONFIG="localhost:1111:11111:/:Instance Portal|localhost:8080:18080:/:Jupyter|localhost:8190:18190:/:Seat 0 Storyrendr|localhost:8191:18191:/:Seat 0 ComfyUI|localhost:8200:18200:/:Seat 1 Storyrendr|localhost:8201:18201:/:Seat 1 ComfyUI|localhost:8210:18210:/:Seat 2 Storyrendr|localhost:8211:18211:/:Seat 2 ComfyUI|localhost:8220:18220:/:Seat 3 Storyrendr|localhost:8221:18221:/:Seat 3 ComfyUI|localhost:8230:18230:/:Seat 4 Storyrendr|localhost:8231:18231:/:Seat 4 ComfyUI|localhost:8240:18240:/:Seat 5 Storyrendr|localhost:8241:18241:/:Seat 5 ComfyUI|localhost:8250:18250:/:Seat 6 Storyrendr|localhost:8251:18251:/:Seat 6 ComfyUI|localhost:8260:18260:/:Seat 7 Storyrendr|localhost:8261:18261:/:Seat 7 ComfyUI"
 
@@ -187,4 +183,16 @@ COPY supervisor/colossul-provision.conf /etc/supervisor/conf.d/colossul-provisio
 
 # Documentation only — Vast exposes ports from the template's port list, and
 # the base image itself declares none.
-EXPOSE 8190 8191 8192 8200 8201 8202 8210 8211 8212 8220 8221 8222
+EXPOSE 8190 8191 8192 8200 8201 8202 8210 8211 8212 8220 8221 8222 \
+       8230 8231 8232 8240 8241 8242 8250 8251 8252 8260 8261 8262
+
+# Size PORTAL_CONFIG to the machine's GPUs, then exec the base image's own
+# entrypoint (/opt/instance-tools/bin/entrypoint.sh, confirmed against the
+# published image config). This has to happen here rather than in provisioning:
+# the portal reads PORTAL_CONFIG once, on first boot, and does not re-read
+# /etc/portal.yaml afterwards.
+#
+# NOTE: Vast's SSH and Jupyter launch modes REPLACE the image entrypoint, so
+# this never runs under them — and neither does supervisord, so seats would not
+# start either way. "Docker ENTRYPOINT" mode remains mandatory.
+ENTRYPOINT ["/opt/colossul/entrypoint.sh"]
