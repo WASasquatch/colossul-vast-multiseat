@@ -137,13 +137,13 @@ models/vae/minimax_h3_audio_vae_fp32.safetensors  605254808  https://huggingface
 [minimax-h3-ref2va]
 models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors  20970379616  https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors
 
-# 4-step turbo LoRA — trades some quality for a large speedup on H3.
-# Unverified against your workflows; enable if your artists ask for it.
-#
-# Also an example of the two-field form: no byte count, just where it goes and
-# where it comes from. That is all a new entry ever needs.
-#[minimax-h3-turbo]
-#models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors
+# 4-step turbo LoRA — trades some quality for a large speedup on H3. No
+# workflow loads it yet, but it is cheap and having it locally is the
+# difference between trying it and not bothering. The resized rank-21 build is
+# an eighth the size for a further quality trade.
+[minimax-h3-turbo]
+models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors  1956171984  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors
+models/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors  314878200  https://huggingface.co/Kijai/MiniMax-H3_comfy/resolve/main/loras/minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -232,8 +232,8 @@ models/checkpoints/sam3.1_multiplex_fp16.safetensors  1745546848  https://huggin
 # rather than fetched three times for 138 GB.
 [ltx-2.3-distilled-1.1]
 models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors  46149345334  https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-1.1.safetensors
-models/vae/ltx-2.3-22b-distilled-1.1.safetensors  link:models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors
-models/text_encoders/ltx-2.3-22b-distilled-1.1.safetensors  link:models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors
+models/vae/ltx-2.3-22b-distilled-1.1.safetensors  link:models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors  
+models/text_encoders/ltx-2.3-22b-distilled-1.1.safetensors  link:models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors  
 
 # ── Qwen image editing, the variants our workflows load ─────────────────────
 # 2512 is the base image model (BG-plate work); the FP8 edit build is a lighter
@@ -399,3 +399,6 @@ models/diffusion_models/qwen_image_edit_2511_bf16.safetensors  40861031560  http
 models/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors  9384670680  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
 models/vae/qwen_image_vae.safetensors  253806246  https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors
 models/loras/Qwen/Edit/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors  849608296  https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors
+# The 8-step build: slower, closer to the un-accelerated result. Same size, and
+# having both locally means an artist can compare without waiting on a sync.
+models/loras/Qwen/Edit/Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors  849608296  https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning/resolve/main/Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors
