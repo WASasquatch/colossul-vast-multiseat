@@ -482,6 +482,30 @@ download_one() {
         printf 'fail\t%s (rename)\n' "$dest" > "$STATUS_DIR/$idx"
         return 1
     fi
+    # Hand the file's cached pages back to the kernel.
+    #
+    # Every byte written stays in the page cache, and cgroup v2 charges that to
+    # the container — so pulling a 700 GB library reads as 700 GB of "memory
+    # used" on the Vast dashboard, which is how that figure ends up above 100%.
+    # It is reclaimable and harmless in isolation, but it competes with four
+    # ComfyUI processes loading 20 GB models, and reclaim under pressure is
+    # slower than simply not caching what nobody is going to read again.
+    #
+    # fsync first: DONTNEED cannot drop pages that are still dirty. Best effort
+    # throughout — a file that stays cached is a cosmetic problem, so nothing
+    # here may fail a download that already succeeded.
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - "$target" 2>/dev/null <<'PY' || true
+import os, sys
+fd = os.open(sys.argv[1], os.O_RDONLY)
+try:
+    os.fsync(fd)
+    os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+finally:
+    os.close(fd)
+PY
+    fi
+
     local secs=$(( $(date +%s) - started ))
     [ "$secs" -lt 1 ] && secs=1
     log "  done $name in $(fmt_secs "$secs")$( [ "$size" != "-" ] && printf ' (%s MB/s)' "$(( size / secs / 1000000 ))" )"

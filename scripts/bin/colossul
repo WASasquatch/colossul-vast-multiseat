@@ -109,6 +109,44 @@ cmd_ram() {
     echo "  reclaimable page cache from reading model files):"
     free -h | sed 's/^/    /'
     echo ""
+
+    # The number the Vast dashboard shows comes from the CONTAINER's cgroup, and
+    # that charge includes cached file pages. Downloading a few hundred GB of
+    # weights therefore reads as "memory used" while being entirely reclaimable
+    # — which is why the figure can even exceed the machine's RAM.
+    #
+    # anon is what processes actually hold and cannot be handed back; file is
+    # cache the kernel drops the moment anything needs the space.
+    local st="" lim=""
+    if [ -r /sys/fs/cgroup/memory.stat ]; then                     # cgroup v2
+        st=/sys/fs/cgroup/memory.stat
+        [ -r /sys/fs/cgroup/memory.max ] && lim="$(cat /sys/fs/cgroup/memory.max)"
+    elif [ -r /sys/fs/cgroup/memory/memory.stat ]; then            # cgroup v1
+        st=/sys/fs/cgroup/memory/memory.stat
+        [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ] && \
+            lim="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)"
+    fi
+    if [ -n "$st" ]; then
+        echo "  Container cgroup — this is what the Vast dashboard reports:"
+        awk -v lim="${lim:-max}" '
+            $1 == "anon"        { anon = $2 }
+            $1 == "file"        { file = $2 }
+            $1 == "total_rss"   { anon = $2 }   # v1 names
+            $1 == "total_cache" { file = $2 }
+            END {
+                printf "    processes (anon)   %8.1f GB   <- real, not reclaimable\n", anon/1073741824
+                printf "    page cache (file)  %8.1f GB   <- reclaimable on demand\n", file/1073741824
+                if (lim ~ /^[0-9]+$/)
+                    printf "    cgroup limit       %8.1f GB\n", lim/1073741824
+                else
+                    printf "    cgroup limit       %8s\n", lim
+            }' "$st"
+        echo ""
+        echo "    If page cache is the large number, nothing is wrong: it is the"
+        echo "    model library passing through on its way to disk."
+        echo ""
+    fi
+
     echo "  Per-seat ComfyUI resident memory:"
     printf '    %-6s %-10s %-10s %s\n' "SEAT" "RSS" "PID" "STATE"
     local i pid rss

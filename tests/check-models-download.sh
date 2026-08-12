@@ -579,6 +579,52 @@ echo "  a link with an unselected source is reported"
 echo "PASS: aliased models resolve from every loader"
 
 echo ""
+echo "=== 8j. a finished download does not sit in the page cache ==="
+# cgroup v2 charges cached file pages to the container, so a 700 GB library
+# reads as 700 GB of "memory used" on the Vast dashboard — which is how that
+# figure ends up above 100% of the machine's RAM. It is reclaimable, but it
+# competes with four ComfyUI processes loading models, and reclaim under
+# pressure is slower than never caching what nobody will read again.
+cat > "$T/cached.py" <<'PY'
+import ctypes, os, sys
+fd = os.open(sys.argv[1], os.O_RDONLY)
+sz = os.fstat(fd).st_size
+libc = ctypes.CDLL("libc.so.6", use_errno=True)
+mm = libc.mmap; mm.restype = ctypes.c_void_p
+mm.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int,
+               ctypes.c_int, ctypes.c_int, ctypes.c_long]
+addr = mm(None, sz, 1, 2, fd, 0)
+pages = (sz + 4095) // 4096
+vec = (ctypes.c_ubyte * pages)()
+libc.mincore(ctypes.c_void_p(addr), ctypes.c_size_t(sz), vec)
+print(sum(1 for b in vec if b & 1) * 4096)
+libc.munmap(ctypes.c_void_p(addr), ctypes.c_size_t(sz)); os.close(fd)
+PY
+cat > "$T/cache.txt" <<EOF
+[cachetest]
+models/vae/cachetest.safetensors  $SMALL_SIZE  $BASE/small.bin
+EOF
+rm -f "$COLOSSUL_ASSETS_ROOT/models/vae/cachetest.safetensors"
+MODEL_MANIFEST="$T/cache.txt" MODEL_SETS="" bash "$SH" cachetest >/dev/null 2>&1
+CT="$COLOSSUL_ASSETS_ROOT/models/vae/cachetest.safetensors"
+[ -f "$CT" ] || fail "the test file did not download"
+resident="$("$PY" "$T/cached.py" "$CT" 2>/dev/null || echo -1)"
+# A control, so this measures the fadvise rather than the filesystem's mood.
+cp "$T/srv/small.bin" "$T/control.bin"
+control="$("$PY" "$T/cached.py" "$T/control.bin" 2>/dev/null || echo -1)"
+if [ "$resident" -lt 0 ] || [ "$control" -lt 0 ]; then
+    echo "  (mincore unavailable here — skipping the measurement)"
+elif [ "$control" -le 0 ]; then
+    echo "  (control was not cached either; filesystem does not cache — skipping)"
+else
+    [ "$resident" -lt "$((control / 4))" ] \
+        || fail "download left $resident bytes cached vs $control for a plain copy — fadvise is not working"
+    echo "  $resident bytes cached after download, $control after a plain copy"
+fi
+grep -q 'POSIX_FADV_DONTNEED' "$SH" || fail "the cache-release step is missing"
+echo "PASS: downloads do not accumulate page cache"
+
+echo ""
 echo "=== 9b. downloads NEVER block the seats from starting ==="
 # The default is now every set — hundreds of gigabytes. Downloading that inline
 # would leave four artists staring at a dead instance for an hour, for something
