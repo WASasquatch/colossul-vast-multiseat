@@ -105,8 +105,9 @@ cmd_gpu() {
 # that matters is `available`, and which processes hold ANONYMOUS memory.
 cmd_ram() {
     echo ""
-    echo "  Host memory (available is the number that matters — used includes"
-    echo "  reclaimable page cache from reading model files):"
+    echo "  HOST memory, as /proc/meminfo reports it. In a container this is the"
+    echo "  whole physical machine — including other tenants' usage, which you"
+    echo "  are not charged for and cannot see the detail of:"
     free -h | sed 's/^/    /'
     echo ""
 
@@ -127,7 +128,8 @@ cmd_ram() {
             lim="$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)"
     fi
     if [ -n "$st" ]; then
-        echo "  Container cgroup — this is what the Vast dashboard reports:"
+        echo "  THIS CONTAINER, from its own cgroup — the only figures that are"
+        echo "  actually yours:"
         awk -v lim="${lim:-max}" '
             $1 == "anon"        { anon = $2 }
             $1 == "file"        { file = $2 }
@@ -139,11 +141,17 @@ cmd_ram() {
                 if (lim ~ /^[0-9]+$/)
                     printf "    cgroup limit       %8.1f GB\n", lim/1073741824
                 else
-                    printf "    cgroup limit       %8s\n", lim
+                    printf "    cgroup limit       %8s   (no container limit set)\n", lim
             }' "$st"
         echo ""
-        echo "    If page cache is the large number, nothing is wrong: it is the"
-        echo "    model library passing through on its way to disk."
+        echo "    Reading it:"
+        echo "      - anon is small, host 'used' is large  -> not you. A shared"
+        echo "        machine's other tenants, which is also how a dashboard"
+        echo "        percentage exceeds 100%: host usage over your allocation."
+        echo "      - file is large                        -> page cache, e.g. a"
+        echo "        model library on its way to disk. Reclaimed on demand."
+        echo "      - anon is large                        -> genuinely yours;"
+        echo "        the per-seat table below shows which seat."
         echo ""
     fi
 
@@ -159,6 +167,26 @@ cmd_ram() {
             printf '    %-6s %-10s %-10s %s\n' "$i" "-" "-" "not running"
         fi
     done
+    echo ""
+
+    # Everything in this container holding more than 200 MB, so "before anything
+    # loaded a model" can be checked rather than assumed. A seat that has not
+    # loaded weights is a few hundred MB; anything in the tens of GB here is
+    # worth explaining.
+    echo "  Every process in this container over 200 MB:"
+    {
+        printf '    %-9s %-9s %s\n' "RSS" "PID" "COMMAND"
+        for p in /proc/[0-9]*; do
+            [ -r "$p/status" ] || continue
+            local kb; kb="$(awk '/^VmRSS:/{print $2}' "$p/status" 2>/dev/null)"
+            [ -n "$kb" ] && [ "$kb" -gt 204800 ] || continue
+            printf '    %6.1f GB %-9s %s\n' "$(awk -v k="$kb" 'BEGIN{print k/1048576}')" \
+                "${p#/proc/}" "$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null | cut -c1-58)"
+        done
+    } | sort -k1,1 -rn -s | head -15
+    echo ""
+    echo "    Nothing listed and yet the dashboard shows tens of GB? Then it is"
+    echo "    not this container — see the reading notes above."
     echo ""
     echo "  Cache eviction threshold: ComfyUI frees cached node outputs once"
     echo "  free RAM drops below ${COLOSSUL_CACHE_RAM:-$((8 * SEAT_COUNT))} GB."
