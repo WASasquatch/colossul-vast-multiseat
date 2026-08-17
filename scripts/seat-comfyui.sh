@@ -63,6 +63,31 @@ if [ -z "${LD_PRELOAD:-}" ] && ldconfig -p 2>/dev/null | grep -q libtcmalloc_min
     export LD_PRELOAD=libtcmalloc_minimal.so.4
 fi
 
+# ── VRAM allocator ──────────────────────────────────────────────────────────
+# Seats deliberately run ComfyUI's stock VRAM policy (--normalvram with smart
+# memory on) so models spill to host RAM dynamically. This is not a policy
+# change: it is internal to PyTorch's caching allocator and does not affect any
+# offload decision ComfyUI makes.
+#
+# By default that allocator carves fixed-size segments it cannot later merge. A
+# seat holding ~23 GB of live tensors on a 32 GB card ends up with the remaining
+# slack split across blocks too small to serve one multi-GB request, and a node
+# dies with "Allocation on device 0 would exceed allowed memory" while reporting
+# a device limit that the numbers say should fit — the tell is CUDA reporting a
+# few MiB free when allocated + requested is several GB under the limit.
+#
+# expandable_segments lets a segment grow in place instead, keeping that slack
+# usable. Set COLOSSUL_CUDA_ALLOC_CONF to override, or to empty to opt out
+# entirely; an inherited PYTORCH_CUDA_ALLOC_CONF always wins.
+if [ -z "${PYTORCH_CUDA_ALLOC_CONF:-}" ]; then
+    # Unset -> default; set-but-empty -> deliberate opt-out. Hence ${x-default}.
+    _alloc_conf="${COLOSSUL_CUDA_ALLOC_CONF-expandable_segments:True}"
+    if [ -n "$_alloc_conf" ]; then
+        export PYTORCH_CUDA_ALLOC_CONF="$_alloc_conf"
+        log "seat $SEAT: PYTORCH_CUDA_ALLOC_CONF=$_alloc_conf"
+    fi
+fi
+
 # ComfyUI-Manager is opt-out. It is the built-in manager (pip package), enabled
 # by this flag — NOT the legacy custom_nodes/ComfyUI-Manager checkout, which
 # provisioning retires because its presence makes ComfyUI force this flag off.

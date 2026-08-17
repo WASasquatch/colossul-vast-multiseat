@@ -202,7 +202,8 @@ carry read-only access to public repositories.
 |---|---|---|
 | `NUM_SEATS` | `6` | Seat count. Requires a matching `PORTAL_CONFIG` — see below. |
 | `GPU_MAP` | `4,5,6,7` | Run seats on specific physical GPUs. |
-| `COLOSSUL_COMFYUI_ARGS` | `--highvram` | Extra flags for every seat's ComfyUI. |
+| `COLOSSUL_COMFYUI_ARGS` | `--preview-method auto` | Extra flags for every seat's ComfyUI. |
+| `COLOSSUL_CUDA_ALLOC_CONF` | `expandable_segments:True` | PyTorch allocator config. Already the default — set it empty to opt out. |
 | `SKIP_VNCCS_EXTRAS` | `1` | Skip the multi-GB SAM3D install. Disables Pose Studio pose extraction. |
 | `SKIP_COMFYUI_REQS` | `1` | Skip the ComfyUI requirements re-sync at provision time. |
 | `COLOSSUL_ASSETS_ROOT` | `/mnt/models` | Relocate the shared model store, e.g. onto a mounted volume so weights outlive the instance. Default `/workspace/ComfyUI_Assets`. |
@@ -215,6 +216,12 @@ carry read-only access to public repositories.
 > crash-loop. The image therefore ignores `COMFYUI_ARGS` entirely and strips any
 > seat-owned flag (`--port`, `--listen`, `--database-url`, the `*-directory`
 > flags, `--cuda-device`) from `COLOSSUL_COMFYUI_ARGS`, logging what it dropped.
+
+> **Leave the VRAM policy alone.** Seats run ComfyUI's stock `--normalvram` with
+> smart memory on, so models offload to host RAM as VRAM gets tight. `--highvram`
+> pins every model resident and disables that — a heavy video workflow then has
+> no headroom left to spike into and dies mid-render. It was previously shown as
+> the example value here, which is why this warning exists.
 
 `PORTAL_CONFIG` is already baked into the image for 4 seats. Only set it if you
 change `NUM_SEATS`.

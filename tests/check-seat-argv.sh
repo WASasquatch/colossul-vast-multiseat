@@ -251,4 +251,50 @@ done
 echo "PASS: each seat resolves to its own port"
 
 echo ""
+echo "=== 12. PyTorch allocator config reaches the process environment ==="
+# expandable_segments is what keeps a seat's reserved-but-fragmented VRAM
+# usable. It has to arrive as an ENV var (the allocator reads it at first CUDA
+# init), so asserting on argv would prove nothing.
+cat > "$T/fake-python" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$T/argv.txt"
+printf '%s\n' "\${PYTORCH_CUDA_ALLOC_CONF:-<unset>}" > "$T/alloc.txt"
+EOF
+chmod +x "$T/fake-python"
+
+run_seat
+got="$(cat "$T/alloc.txt")"
+[ "$got" = "expandable_segments:True" ] \
+    || fail "default PYTORCH_CUDA_ALLOC_CONF should be expandable_segments:True, got '$got'"
+echo "  default -> $got"
+
+run_seat COLOSSUL_CUDA_ALLOC_CONF='max_split_size_mb:512'
+got="$(cat "$T/alloc.txt")"
+[ "$got" = "max_split_size_mb:512" ] \
+    || fail "COLOSSUL_CUDA_ALLOC_CONF override ignored, got '$got'"
+echo "  COLOSSUL_CUDA_ALLOC_CONF override -> $got"
+
+# Set-but-empty is a deliberate opt-out and must leave the var unset entirely —
+# exporting an empty PYTORCH_CUDA_ALLOC_CONF is not the same as not setting it.
+run_seat COLOSSUL_CUDA_ALLOC_CONF=
+got="$(cat "$T/alloc.txt")"
+[ "$got" = "<unset>" ] \
+    || fail "empty COLOSSUL_CUDA_ALLOC_CONF should opt out entirely, got '$got'"
+echo "  COLOSSUL_CUDA_ALLOC_CONF= (empty) -> unset"
+
+run_seat PYTORCH_CUDA_ALLOC_CONF='garbage_collection_threshold:0.8'
+got="$(cat "$T/alloc.txt")"
+[ "$got" = "garbage_collection_threshold:0.8" ] \
+    || fail "an inherited PYTORCH_CUDA_ALLOC_CONF must win, got '$got'"
+echo "  inherited PYTORCH_CUDA_ALLOC_CONF wins -> $got"
+
+# The seat must not pass VRAM-policy flags: stock offload-to-RAM is deliberate.
+run_seat
+for flag in --highvram --lowvram --normalvram --reserve-vram --disable-smart-memory; do
+    grep -qxF -- "$flag" "$T/argv.txt" \
+        && fail "seat passes $flag; seats must run ComfyUI's stock VRAM policy"
+done
+echo "PASS: allocator config is wired via env, and no VRAM-policy flags are forced"
+
+echo ""
 echo "ALL SEAT ARGV CHECKS PASSED"

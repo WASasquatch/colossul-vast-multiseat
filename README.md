@@ -584,10 +584,53 @@ restore ComfyUI's own defaults.
 > seat's actual RSS — if `available` is healthy, there is nothing to fix.
 
 Related flags worth knowing, none of which are set by default:
-`--disable-smart-memory` makes ComfyUI offload models to RAM aggressively rather
-than holding VRAM (it trades VRAM pressure for *more* RAM use, so it's the wrong
-lever here); `--cache-none` disables node-output caching entirely, at the cost of
-re-running every node each time. Pass either through `COLOSSUL_COMFYUI_ARGS`.
+`--disable-smart-memory` offloads models to RAM aggressively rather than holding
+VRAM, trading VRAM pressure for *more* RAM use — the wrong lever if RAM is what
+you're short of, the right one if you're VRAM-bound on a box with RAM to spare
+(a 2-seat rental, typically); `--cache-none` disables node-output caching
+entirely, at the cost of re-running every node each time. Pass either through
+`COLOSSUL_COMFYUI_ARGS`.
+
+### VRAM
+
+**Seats run ComfyUI's stock VRAM policy on purpose.** No `--normalvram`,
+`--highvram` or `--reserve-vram` is passed, so smart memory stays on and models
+spill to host RAM dynamically as a workflow gets tight. Don't add `--highvram`:
+it pins every model resident and disables exactly that, leaving a heavy video
+workflow no headroom to spike into.
+
+One non-policy setting *is* applied — `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+This is internal to PyTorch's caching allocator and changes no offload decision
+ComfyUI makes. By default that allocator carves fixed-size segments it can't
+later merge, so a seat holding ~23 GB of live tensors on a 32 GB card ends up
+with its remaining slack split across blocks too small to serve a single
+multi-GB request. `expandable_segments` grows a segment in place instead.
+
+The signature of that failure, worth recognising because the numbers look
+self-contradictory:
+
+```
+Allocation on device 0 would exceed allowed memory
+  Currently allocated : 23.48 GiB      <- live tensors in THIS process
+  Requested           :  2.88 GiB
+  Device limit        : 31.36 GiB      <- full card; nothing is capping you
+  Free (per CUDA)     :  9.06 MiB      <- but the card is full anyway
+```
+
+23.48 + 2.88 is comfortably under 31.36, yet CUDA has nothing left to hand out:
+the gap is CUDA context, cuBLAS/cuDNN workspaces and fragmented-but-reserved
+blocks. Override with `COLOSSUL_CUDA_ALLOC_CONF`, or set it empty to opt out.
+
+> `device 0` in that message names nothing useful. Every seat pins
+> `CUDA_VISIBLE_DEVICES`, so its own GPU is always device 0 — use `colossul gpu`
+> to find the physical card, and
+> `nvidia-smi --query-compute-apps=pid,used_gpu_memory --format=csv` to see who
+> actually holds the memory.
+
+Also note the seat's **backend shares its ComfyUI's GPU** — it runs SAM3D for
+Pose Studio pose extraction. That model is loaded on demand and released as soon
+as extraction finishes (the vendored package does not do this itself; Storyrendr's
+`app/services/vnccs/sam3d.py` forces it), so it costs VRAM only while in use.
 
 ### Models
 
@@ -648,6 +691,7 @@ colossul provision && colossul restart all
 | `NUM_SEATS` | `4` | Seat count. Also update `PORTAL_CONFIG` — see below. |
 | `GPU_MAP` | identity | Comma-separated physical GPUs, e.g. `4,5,6,7`. |
 | `COLOSSUL_COMFYUI_ARGS` | — | Extra ComfyUI flags for every seat. **Not** `COMFYUI_ARGS` — see caveats. |
+| `COLOSSUL_CUDA_ALLOC_CONF` | `expandable_segments:True` | PyTorch allocator config for every seat. Set empty to opt out. |
 | `COMFYUI_HOME` | auto-detected | Override if the base image moves ComfyUI. |
 | `COLOSSUL_ASSETS_ROOT` | `$WORKSPACE/ComfyUI_Assets` | Shared model store. Point at a mounted volume to keep weights across instances. |
 | `SKIP_VNCCS_EXTRAS` | `0` | `1` skips the multi-GB SAM3D install (disables Pose Studio extraction). |
